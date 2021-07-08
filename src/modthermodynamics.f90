@@ -532,6 +532,10 @@ contains
 
                 Tnr = Tnr - (thlguess-thl0(i,j,k))/((thlguess-thlguessmin)*500.)
               enddo
+              if(niter > 99) then
+                write(*,*) 'thermowarning: i,j,k,thl0(i,j,k),qt0(i,j,k)'
+                write(*,*) i,j,k,thl0(i,j,k),qt0(i,j,k)
+              endif
               nitert =max(nitert,niter)
               tmp0(i,j,k)= Tnr
               ilratio = max(0.,min(1.,(Tnr-tdn)/(tup-tdn)))
@@ -556,9 +560,9 @@ contains
       end do
       end do
       end do
-      if(nitert>99) then
-      write(*,*) 'thermowarning'
-      endif
+!       if(nitert>99) then
+!       write(*,*) 'thermowarning'
+!       endif
 
   end subroutine icethermo0
 

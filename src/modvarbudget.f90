@@ -13,7 +13,7 @@ module modvarbudget
   save
   
   ! netCDF variables 
-  integer,parameter :: nvar = 14
+  integer,parameter :: nvar = 16
   character(80),dimension(nvar,4) :: ncname
 
   real    :: dtav, timeav
@@ -26,6 +26,7 @@ module modvarbudget
   real, allocatable  :: thl2Psfav  (:), thl2Psfmn(:)   ! subgrid production of variance at full level &
   real, allocatable  :: thl2Trfav  (:), thl2Trfmn(:)   ! resolved transport of variance at full level &
   real, allocatable  :: thl2Disfav (:), thl2Disfmn(:)  ! dissipation of thl variance at full level &
+  real, allocatable  :: thl2Disvfav (:), thl2Disvfmn(:)  ! dissipation of thl variance at full level &
   real, allocatable  :: thl2Sfav   (:), thl2Sfmn(:)    ! source of variance at full level &
   real, allocatable  :: thl2tendf  (:)                 ! tendency of thl variance at full level &
   real, allocatable  :: thl2residf (:)                 ! residual of thl variance at full level &
@@ -36,10 +37,13 @@ module modvarbudget
   real, allocatable  :: qt2Psfav  (:), qt2Psfmn(:)    ! subgrid production of variance at full level &
   real, allocatable  :: qt2Trfav  (:), qt2Trfmn(:)    ! resolved transport of variance at full level &
   real, allocatable  :: qt2Disfav (:), qt2Disfmn(:)   ! dissipation of qt variance at full level &
+  real, allocatable  :: qt2Disvfav (:), qt2Disvfmn(:)   ! dissipation of qt variance at full level &
   real, allocatable  :: qt2Sfav   (:), qt2Sfmn(:)     ! source of variance at full level &
   real, allocatable  :: qt2tendf  (:)                 ! tendency of qt variance at full level &
   real, allocatable  :: qt2residf (:)                 ! tendency of qt variance at full level &
   real, allocatable  :: qt2bf     (:)                 ! variance at beginning of averaging period &
+
+  real, allocatable  :: qtpmcr0(:,:,:)                ! dummy field for microphysical tendency when imicro=0 &
 
 contains
 
@@ -89,7 +93,7 @@ contains
 
     allocate(thl2fav   (k1))
     allocate(thl2Prfav (k1),thl2Prfmn(k1),thl2Psfav (k1),thl2Psfmn (k1))
-    allocate(thl2Trfav (k1),thl2Trfmn(k1),thl2Disfav(k1),thl2Disfmn(k1))
+    allocate(thl2Trfav (k1),thl2Trfmn(k1),thl2Disfav(k1),thl2Disfmn(k1),thl2Disvfav(k1),thl2Disvfmn(k1))
     allocate(thl2Sfav  (k1),thl2Sfmn (k1))
     allocate(thl2tendf (k1))
     allocate(thl2residf(k1))
@@ -97,15 +101,17 @@ contains
 
     allocate(qt2fav   (k1))
     allocate(qt2Prfav (k1),qt2Prfmn(k1),qt2Psfav (k1),qt2Psfmn (k1))
-    allocate(qt2Trfav (k1),qt2Trfmn(k1),qt2Disfav(k1),qt2Disfmn(k1))
+    allocate(qt2Trfav (k1),qt2Trfmn(k1),qt2Disfav(k1),qt2Disfmn(k1),qt2Disvfav(k1),qt2Disvfmn(k1))
     allocate(qt2Sfav  (k1),qt2Sfmn (k1))
     allocate(qt2tendf (k1))
     allocate(qt2residf(k1))
     allocate(qt2bf    (k1))
 
+    allocate(qtpmcr0(2-ih:i1+ih,2-jh:j1+jh,k1))
+
     thl2fav    = 0.
     thl2Prfav  = 0.; thl2Prfmn = 0.; thl2Psfav  = 0.; thl2Psfmn  = 0.
-    thl2Trfav  = 0.; thl2Trfmn = 0.; thl2Disfav = 0.; thl2Disfmn = 0.
+    thl2Trfav  = 0.; thl2Trfmn = 0.; thl2Disfav = 0.; thl2Disfmn = 0.; thl2Disvfav = 0.; thl2Disvfmn = 0.
     thl2Sfav   = 0.; thl2Sfmn  = 0.
     thl2tendf  = 0.
     thl2residf = 0.
@@ -113,11 +119,13 @@ contains
 
     qt2fav    = 0.
     qt2Prfav  = 0.; qt2Prfmn  = 0.; qt2Psfav  = 0.; qt2Psfmn  = 0.
-    qt2Trfav  = 0.; qt2Trfmn  = 0.; qt2Disfav = 0.; qt2Disfmn = 0. 
+    qt2Trfav  = 0.; qt2Trfmn  = 0.; qt2Disfav = 0.; qt2Disfmn = 0.; qt2Disvfav = 0.; qt2Disvfmn = 0.
     qt2Sfav   = 0.; qt2Sfmn   = 0.
     qt2tendf  = 0.
     qt2residf = 0.
     qt2bf     = 0.
+
+    qtpmcr0 = 0.
 
     if(myid==0 .and. .not. lwarmstart) then
        open (ifoutput,file='varbudget.'//cexpnr,status='replace')
@@ -134,16 +142,18 @@ contains
         call ncinfo(ncname( 2,:),'thl2Pr','Resolved production of thl variance','K^2/s','tt')
         call ncinfo(ncname( 3,:),'thl2Ps','SFS production of thl variance','K^2/s','tt')
         call ncinfo(ncname( 4,:),'thl2Tr','Resolved transport of thl variance','K^2/s','tt')
-        call ncinfo(ncname( 5,:),'thl2D','Dissipation of thl variance','K^2/s','tt')
-        call ncinfo(ncname( 6,:),'thl2S','Source of thl variance','K^2/s','tt')
-        call ncinfo(ncname( 7,:),'thl2Res','Residual of thl budget','K^2/s','tt')
-        call ncinfo(ncname( 8,:),'qt2tendf','Tendency of qt variance','kg^2/kg^2/s','tt')
-        call ncinfo(ncname( 9,:),'qt2Pr','Resolved production of qt variance','kg^2/kg^2/s','tt')
-        call ncinfo(ncname(10,:),'qt2Ps','SFS production of qt variance','kg^2/kg^2/s','tt')
-        call ncinfo(ncname(11,:),'qt2Tr','Resolved transport of qt variance','kg^2/kg^2/s','tt')
-        call ncinfo(ncname(12,:),'qt2D','Dissipation of qt variance','kg^2/kg^2/s','tt')
-        call ncinfo(ncname(13,:),'qt2S','Source of qt variance','kg^2/kg^2/s','tt')
-        call ncinfo(ncname(14,:),'qt2Res','Residual of qt budget','kg^2/kg^2/s','tt')
+        call ncinfo(ncname( 5,:),'thl2D','Horizontal dissipation of thl variance','K^2/s','tt')
+        call ncinfo(ncname( 6,:),'thl2Dv','Vertical dissipation of thl variance','K^2/s','tt')
+        call ncinfo(ncname( 7,:),'thl2S','Source of thl variance','K^2/s','tt')
+        call ncinfo(ncname( 8,:),'thl2Res','Residual of thl budget','K^2/s','tt')
+        call ncinfo(ncname( 9,:),'qt2tendf','Tendency of qt variance','kg^2/kg^2/s','tt')
+        call ncinfo(ncname(10,:),'qt2Pr','Resolved production of qt variance','kg^2/kg^2/s','tt')
+        call ncinfo(ncname(11,:),'qt2Ps','SFS production of qt variance','kg^2/kg^2/s','tt')
+        call ncinfo(ncname(12,:),'qt2Tr','Resolved transport of qt variance','kg^2/kg^2/s','tt')
+        call ncinfo(ncname(13,:),'qt2D','Horizontal dissipation of qt variance','kg^2/kg^2/s','tt')
+        call ncinfo(ncname(14,:),'qt2Dv','Vertical dissipation of qt variance','kg^2/kg^2/s','tt')
+        call ncinfo(ncname(15,:),'qt2S','Source of qt variance','kg^2/kg^2/s','tt')
+        call ncinfo(ncname(16,:),'qt2Res','Residual of qt budget','kg^2/kg^2/s','tt')
         call define_nc( ncid_prof, NVar, ncname)
      end if
 
@@ -180,7 +190,7 @@ contains
     use modfields     , only : qt0,thl0
     use modsubgriddata, only : ekh
     use modsurfdata   , only : thlflux,qtflux
-    use modmicrodata  , only : qtpmcr
+    use modmicrodata  , only : imicro,qtpmcr
     use modraddata    , only : thlprad
     use modglobal     , only : i1,j1,ih,jh,k1,cp,ijtot, &
                                iadv_thl,iadv_qt
@@ -190,12 +200,12 @@ contains
   ! Set av values to zero
     thl2fav   = 0.
     thl2Prfav = 0.; thl2Psfav  = 0.
-    thl2Trfav = 0.; thl2Disfav = 0.
+    thl2Trfav = 0.; thl2Disfav = 0.; thl2Disvfav = 0.
     thl2Sfav  = 0.;
 
     qt2fav   = 0.
     qt2Prfav = 0.; qt2Psfav  = 0.
-    qt2Trfav = 0.; qt2Disfav = 0.
+    qt2Trfav = 0.; qt2Disfav = 0.; qt2Disvfav = 0.
     qt2Sfav  = 0.
 
 ! ---------------------------------------------------------
@@ -204,11 +214,18 @@ contains
 
     call varproduction (thl0,thlflux,thlprad,iadv_thl, &
             thl2fav, &
-            thl2Prfav,thl2Psfav,thl2Trfav,thl2Disfav,thl2Sfav)
+            thl2Prfav,thl2Psfav,thl2Trfav,thl2Disfav,thl2Disvfav,thl2Sfav)
 
-    call varproduction (qt0,qtflux,qtpmcr,iadv_qt, &
-           qt2fav, &
-           qt2Prfav,qt2Psfav,qt2Trfav,qt2Disfav,qt2Sfav)
+  ! Set qtpmcr to zero if microphysics scheme not enabled
+    if (imicro == 0) then
+      call varproduction (qt0,qtflux,qtpmcr0,iadv_qt, &
+             qt2fav, &
+             qt2Prfav,qt2Psfav,qt2Trfav,qt2Disfav,qt2Disvfav,qt2Sfav)
+    else 
+      call varproduction (qt0,qtflux,qtpmcr,iadv_qt, &
+             qt2fav, &
+             qt2Prfav,qt2Psfav,qt2Trfav,qt2Disfav,qt2Disvfav,qt2Sfav)
+    end if
 
 ! ---------------------------------------------------------
 !  2. ADD SLAB AVERAGES TO TIME MEANS
@@ -218,19 +235,21 @@ contains
     thl2Psfmn  = thl2Psfmn  + thl2Psfav
     thl2Trfmn  = thl2Trfmn  + thl2Trfav
     thl2Disfmn = thl2Disfmn + thl2Disfav
+    thl2Disvfmn = thl2Disvfmn + thl2Disvfav
     thl2Sfmn   = thl2Sfmn   + thl2Sfav
 
     qt2Prfmn  = qt2Prfmn  + qt2Prfav
     qt2Psfmn  = qt2Psfmn  + qt2Psfav
     qt2Trfmn  = qt2Trfmn  + qt2Trfav
     qt2Disfmn = qt2Disfmn + qt2Disfav
+    qt2Disvfmn = qt2Disvfmn + qt2Disvfav
     qt2Sfmn   = qt2Sfmn   + qt2Sfav
 
   end subroutine do_varbudget
 
   subroutine varproduction (varxf,varxflux,src,iadv_var, &
                 varx2fav, &
-                resprodf,subprodf,restranf,disf,srcf)
+                resprodf,subprodf,restranf,disf,disvf,srcf)
 
 ! -----------------------------------------------------
 !   compute variance budget
@@ -244,9 +263,10 @@ contains
                                dzf,dzh,ijtot,dx2i,dy2i,cu,cv, &
                                iadv_cd2,iadv_5th,iadv_52,     &
                                iadv_cd6,iadv_62,iadv_kappa
-    use modsubgriddata, only : ekh
+                               
+    use modsubgriddata, only : ekh, anis_fac
     use modsubgrid,     only : diffc
-    use modfields,      only : u0,v0,w0,u0av,v0av
+    use modfields,      only : u0,v0,w0,u0av,v0av,rhobh,rhobf
     use modmpi,         only : comm3d,my_real,mpi_sum,mpierr, &
                                slabsum
     implicit none
@@ -263,6 +283,7 @@ contains
         subprodf   (k1),                       &    !'gradient' production, at full level &
         restranf   (k1),                       &    !resolved transport of (co-)variance at full level &
         disf       (k1),                       &    !'real' dissipation , at full level
+        disvf      (k1),                       &    !'real' dissipation , at full level
         srcf       (k1)                             !source term interaction
 
 !    ----------- function variables
@@ -302,6 +323,7 @@ contains
     subprodf    = 0.
     restranf    = 0.
     disf        = 0.
+    disvf       = 0.
     srcf        = 0.
 
     varx2favl   = 0.
@@ -440,7 +462,30 @@ contains
     
     term = 0.
 
-    call diffc(varxf,term,varxflux)
+!     call diffc(varxf,term,varxflux)
+    ! SEPARATE INTO HORIZONTAL AND VERTICAL CONTRIBUTION
+
+    ! Horizontal dissipation
+    do k=1,kmax
+      kp=k+1
+      km=k-1
+
+      do j=2,j1
+        jp=j+1
+        jm=j-1
+
+        do i=2,i1
+          term(i,j,k) = term(i,j,k) &
+                    +  0.5 * ( &
+                  ( (ekh(i+1,j,k)+ekh(i,j,k))*(varxf(i+1,j,k)-varxf(i,j,k)) &
+                    -(ekh(i,j,k)+ekh(i-1,j,k))*(varxf(i,j,k)-varxf(i-1,j,k)))*dx2i * anis_fac(k) &
+                    + &
+                  ( (ekh(i,jp,k)+ekh(i,j,k)) *(varxf(i,jp,k)-varxf(i,j,k)) &
+                    -(ekh(i,j,k)+ekh(i,jm,k)) *(varxf(i,j,k)-varxf(i,jm,k)) )*dy2i * anis_fac(k) &
+                  )
+        end do
+      end do
+    end do
 
     call slabsum(term_av ,1,k1,term ,2-ih,i1+ih,2-jh,j1+jh,1,k1,2,i1,2,j1,1,k1)
     term_av = term_av / ijtot
@@ -453,6 +498,53 @@ contains
 
     call slabsum(disf ,1,k1,dumfield ,2-ih,i1+ih,2-jh,j1+jh,1,k1,2,i1,2,j1,1,k1)
     disf = disf/ijtot
+
+
+    ! Vertical dissipation
+    term = 0.
+
+    do k=1,kmax
+      kp=k+1
+      km=k-1
+
+      do j=2,j1
+        jp=j+1
+        jm=j-1
+
+        do i=2,i1
+          term(i,j,k) = term(i,j,k) &
+                  + 0.5 * & 
+                  ( rhobh(kp)/rhobf(k) * (dzf(kp)*ekh(i,j,k) + dzf(k)*ekh(i,j,kp)) &
+                    *  (varxf(i,j,kp)-varxf(i,j,k)) / dzh(kp)**2 &
+                    - &
+                    rhobh(k)/rhobf(k) * (dzf(km)*ekh(i,j,k) + dzf(k)*ekh(i,j,km)) &
+                    *  (varxf(i,j,k)-varxf(i,j,km)) / dzh(k)**2           )/dzf(k)
+        end do
+      end do
+    end do
+
+    do j=2,j1
+      do i=2,i1
+
+        term(i,j,1) = term(i,j,1) &
+                  + 0.5 * &
+                ( rhobh(2)/rhobf(1) * (dzf(2)*ekh(i,j,1) + dzf(1)*ekh(i,j,2)) &
+                  *  (varxf(i,j,2)-varxf(i,j,1)) / dzh(2)**2 &
+                  + rhobh(1)/rhobf(1)*varxflux(i,j) *2.                        )/dzf(1)
+      end do
+    end do
+
+    call slabsum(term_av ,1,k1,term ,2-ih,i1+ih,2-jh,j1+jh,1,k1,2,i1,2,j1,1,k1)
+    term_av = term_av / ijtot
+
+    do k=1,k1
+       term(:,:,k) = term(:,:,k) - term_av(k)
+    enddo
+
+    dumfield = 2.*varxfdev*term
+
+    call slabsum(disvf ,1,k1,dumfield ,2-ih,i1+ih,2-jh,j1+jh,1,k1,2,i1,2,j1,1,k1)
+    disvf = disvf/ijtot
     
    !-------------------------------------------------------------
    !      Compute subgrid gradient production subprodf:
@@ -543,6 +635,7 @@ contains
     thl2Psfmn  = thl2Psfmn          / nsamples
     thl2Trfmn  = thl2Trfmn          / nsamples
     thl2Disfmn = thl2Disfmn         / nsamples
+    thl2Disvfmn = thl2Disvfmn         / nsamples
     thl2Sfmn   = thl2Sfmn           / nsamples
 
     qt2tendf   = (qt2fav - qt2bf)   / timeav
@@ -550,6 +643,7 @@ contains
     qt2Psfmn   = qt2Psfmn           / nsamples
     qt2Trfmn   = qt2Trfmn           / nsamples
     qt2Disfmn  = qt2Disfmn          / nsamples
+    qt2Disvfmn  = qt2Disvfmn          / nsamples
     qt2Sfmn    = qt2Sfmn            / nsamples
 
     thl2bf = thl2fav
@@ -561,10 +655,10 @@ contains
 
     do k=1,k1
       thl2residf(k) = thl2tendf(k) - thl2Prfmn (k) - thl2Psfmn(k) &
-                    - thl2Trfmn(k) - thl2Disfmn(k) - thl2Sfmn (k)
+                    - thl2Trfmn(k) - thl2Disfmn(k) - thl2Disvfmn(k) - thl2Sfmn (k)
 
       qt2residf(k) = qt2tendf(k) - qt2Prfmn (k) - qt2Psfmn(k) &
-                   - qt2Trfmn(k) - qt2Disfmn(k) - qt2Sfmn (k) 
+                   - qt2Trfmn(k) - qt2Disfmn(k) - qt2Disvfmn(k) - qt2Sfmn (k) 
     end do
 
  !-------------------------------------------------------------
@@ -595,15 +689,17 @@ contains
         vars(:, 3)=thl2Psfmn
         vars(:, 4)=thl2Trfmn
         vars(:, 5)=thl2Disfmn
-        vars(:, 6)=thl2Sfmn
-        vars(:, 7)=thl2residf
-        vars(:, 8)=qt2tendf
-        vars(:, 9)=qt2Prfmn
-        vars(:,10)=qt2Psfmn
-        vars(:,11)=qt2Trfmn
-        vars(:,12)=qt2Disfmn
-        vars(:,13)=qt2Sfmn
-        vars(:,14)=qt2residf
+        vars(:, 6)=thl2Disvfmn
+        vars(:, 7)=thl2Sfmn
+        vars(:, 8)=thl2residf
+        vars(:, 9)=qt2tendf
+        vars(:,10)=qt2Prfmn
+        vars(:,11)=qt2Psfmn
+        vars(:,12)=qt2Trfmn
+        vars(:,13)=qt2Disfmn
+        vars(:,14)=qt2Disvfmn
+        vars(:,15)=qt2Sfmn
+        vars(:,16)=qt2residf
         call writestat_nc(ncid_prof,nvar,ncname,vars(1:kmax,:),nrec_prof,kmax)
       endif
 
@@ -615,6 +711,7 @@ contains
     thl2Psfmn  = 0.
     thl2Trfmn  = 0.
     thl2Disfmn = 0.
+    thl2Disvfmn = 0.
     thl2Sfmn   = 0.
     thl2residf = 0.
 
@@ -622,6 +719,7 @@ contains
     qt2Psfmn  = 0.
     qt2Trfmn  = 0.
     qt2Disfmn = 0.
+    qt2Disvfmn = 0.
     qt2Sfmn   = 0.
     qt2residf = 0.
 
@@ -635,11 +733,13 @@ contains
 
     deallocate(thl2fav   ,thl2Prfav ,thl2Prfmn,thl2Psfav,thl2Psfmn)
     deallocate(thl2Trfav ,thl2Trfmn ,thl2Sfav ,thl2Sfmn)
-    deallocate(thl2Disfav,thl2Disfmn,thl2tendf,thl2residf,thl2bf)
+    deallocate(thl2Disfav,thl2Disvfav,thl2Disfmn,thl2Disvfmn,thl2tendf,thl2residf,thl2bf)
 
     deallocate(qt2fav   ,qt2Prfav ,qt2Prfmn,qt2Psfav,qt2Psfmn)
     deallocate(qt2Trfav ,qt2Trfmn ,qt2Sfav ,qt2Sfmn)
-    deallocate(qt2Disfav,qt2Disfmn,qt2tendf,qt2residf,qt2bf)
+    deallocate(qt2Disfav,qt2Disvfav,qt2Disfmn,qt2Disvfmn,qt2tendf,qt2residf,qt2bf)
+
+    deallocate(qtpmcr0)
 
   end subroutine exitvarbudget
 
