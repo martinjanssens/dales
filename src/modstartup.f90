@@ -302,6 +302,7 @@ contains
     use modglobal, only : itot,jtot, ysize,xsize,dtmax,runtime, startfile,lwarmstart,eps1, imax,jmax
     use modmpi,    only : myid,nprocx,nprocy,mpierr
     use modtimedep, only : ltimedep
+    use mpi
 
 
       if(mod(jtot,nprocy) /= 0) then
@@ -395,7 +396,7 @@ contains
 
     use modtestbed,        only : ltestbed,tb_ps,tb_thl,tb_qt,tb_u,tb_v,tb_w,tb_ug,tb_vg,&
                                   tb_dqtdxls,tb_dqtdyls,tb_qtadv,tb_thladv
-
+    use mpi
     integer i,j,k,n
     logical negval !switch to allow or not negative values in randomnization
 
@@ -836,7 +837,7 @@ contains
     use modfields,  only : u0,v0,w0,thl0,qt0,ql0,ql0h,e120,dthvdz,presf,presh,initial_presf,initial_presh,sv0,tmp0,esl,qvsl,qvsi
     use modglobal,  only : i1,i2,ih,j1,j2,jh,k1,dtheta,dqt,dsv,startfile,timee,&
                            tres,ifinput,nsv,dt
-    use modmpi,     only : cmyid
+    use modmpi,     only : myid, cmyid
     use modsubgriddata, only : ekm,ekh
 
 
@@ -849,7 +850,7 @@ contains
     name = startfile
     name(5:5) = 'd'
     name(13:20)=cmyid
-    write(6,*) 'loading ',name
+    if (myid == 0) write(6,*) 'loading ',name
     open(unit=ifinput,file=name,form='unformatted', status='old')
 
       read(ifinput)  (((u0    (i,j,k),i=2-ih,i1+ih),j=2-jh,j1+jh),k=1,k1)
@@ -920,7 +921,7 @@ contains
 
     if (nsv>0) then
       name(5:5) = 's'
-      write(6,*) 'loading ',name
+      if (myid == 0) write(6,*) 'loading ',name
       open(unit=ifinput,file=name,form='unformatted')
       read(ifinput) ((((sv0(i,j,k,n),i=2-ih,i1+ih),j=2-jh,j1+jh),k=1,k1),n=1,nsv)
       read(ifinput) (((svflux(i,j,n),i=1,i2),j=1,j2),n=1,nsv)
@@ -931,7 +932,7 @@ contains
 
     if (isurf == 1) then
       name(5:5) = 'l'
-      write(6,*) 'loading ',name
+      if (myid == 0) write(6,*) 'loading ',name
       open(unit=ifinput,file=name,form='unformatted')
       read(ifinput) (((tsoil(i,j,k),i=1,i2),j=1,j2),k=1,ksoilmax)
       read(ifinput) (((phiw(i,j,k),i=1,i2),j=1,j2),k=1,ksoilmax)
@@ -1067,7 +1068,7 @@ contains
       close (ifoutput)
       linkname = name
       linkname(6:11) = "latest"
-      call system("cp "//name //" "//linkname)
+      call system("ln -s -f "//name //" "//linkname)
 
       if (nsv>0) then
         name(5:5)='s'
@@ -1080,7 +1081,7 @@ contains
         close (ifoutput)
         linkname = name
         linkname(6:11) = "latest"
-        call system("cp "//name //" "//linkname)
+        call system("ln -s -f "//name //" "//linkname)
 
       end if
 
@@ -1103,7 +1104,7 @@ contains
         close (ifoutput)
         linkname = name
         linkname(6:11) = "latest"
-        call system("cp "//name //" "//linkname)
+        call system("ln -s -f "//name //" "//linkname)
       end if
 
 
@@ -1208,6 +1209,7 @@ contains
     use modglobal,         only : k1,kmax,zf,zh,dzf,dzh,rv,rd,grav,cp,pref0,lwarmstart,ibas_prf,cexpnr,ifinput,ifoutput
     use modsurfdata,       only : thls,ps,qts
     use modmpi,            only : myid,comm3d,mpierr,my_real
+    use mpi
     implicit none
 
     real :: thvb,prsb ! for calculating moist adiabat

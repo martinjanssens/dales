@@ -462,6 +462,7 @@ module daleslib
             !use modprojection,     only : projection
             use modchem,            only : twostep
             use modcanopy,          only : canopy
+            use modadvection,       only : advection
 
             implicit none
 
@@ -799,7 +800,7 @@ module daleslib
 
     ! Counts the profile of saturated grid cell fraction and scatters the result to all processes
     function gathersatfrac(Ag) result(ret)
-      use mpi, only: MPI_SUM, MPI_IN_PLACE
+      use mpi
       use modmpi, only: comm3d, my_real, nprocs
       use modglobal,   only : i1, j1
       use modfields, only: ql0
@@ -1113,7 +1114,7 @@ module daleslib
         do i=1,mm - 1
             xday = xday + mdays(i)
         enddo
-        xday = xday + dd - 1
+        xday = xday + dd
         xtime = float(hour) + minute/60. + second/3600. 
     end subroutine set_start_time
     

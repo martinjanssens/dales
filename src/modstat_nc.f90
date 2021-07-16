@@ -34,7 +34,7 @@ module modstat_nc
     logical :: lsync   = .false.     ! Sync NetCDF file after each writestat_*_nc
     logical :: lclassic = .false.    ! Create netCDF in CLASSIC format (less RAM usage, compression not supported)
     integer :: deflate = 2           ! Deflate level for netCDF files (only for NETCDF4 format)
-    
+
     integer, save :: timeID=0, ztID=0, zmID=0, xtID=0, xmID=0, ytID=0, ymID=0,ztsID=0, zqID=0
     real(kind=4) :: nc_fillvalue = -999.
 !> The only interface necessary to write data to netcdf, regardless of the dimensions.
@@ -71,31 +71,38 @@ contains
     call MPI_BCAST(lsync      ,1,MPI_LOGICAL, 0,comm3d,mpierr)
     call MPI_BCAST(lclassic   ,1,MPI_LOGICAL, 0,comm3d,mpierr)
     call MPI_BCAST(deflate    ,1,MPI_INTEGER, 0,comm3d,mpierr)
-    
+
   end subroutine initstat_nc
 !
 ! ----------------------------------------------------------------------
 !> Subroutine Open_NC: Opens a NetCDF File and identifies starting record
 !
-  subroutine open_nc (fname, ncid,nrec,n1, n2, n3, ns,nq)
+  subroutine open_nc (fname, ncid, nrec, n1, n2, n3, ns, nq, lclassic_par)
     use modglobal, only : author,version,rtimee
     use modversion, only : git_version
     implicit none
     integer, intent (out) :: ncid,nrec
     integer, optional, intent (in) :: n1, n2, n3, ns, nq
+    logical, optional, intent (in) :: lclassic_par
     character (len=40), intent (in) :: fname
 
     character (len=12):: date='',time=''
     integer :: iret,varid,ncall,RecordDimID
     real, allocatable :: xtimes(:)
     logical :: exans
+    logical :: lclassic_local
 
     inquire(file=trim(fname),exist=exans)
+
+    lclassic_local = lclassic         ! global flag from NAMNETCDFSTATS
+    if (present(lclassic_par)) then
+       lclassic_local = lclassic_par  ! override with lclassic_par parameter if present
+    end if
 
     ncall = 0
     if (.not.exans) then
       call date_and_time(date,time)
-      if (lclassic) then
+      if (lclassic_local) then
          call nchandle_error(nf90_create(fname,NF90_CLASSIC_MODEL,ncid))
       else
          call nchandle_error(nf90_create(fname,NF90_NETCDF4,ncid))
@@ -193,7 +200,7 @@ contains
     iret = nf90_enddef(ncID)
     ! Fails with  NetCDF: Operation not allowed in data mode
     ! when the netCDF files already exist
-    
+
   end subroutine open_nc
 
   !
@@ -310,9 +317,10 @@ contains
         call nchandle_error(iret)
       end if
 
-      if (deflate > 0 .and. .not. lclassic) then
-         call nchandle_error(nf90_def_var_deflate(ncid,varID, 0, 1, deflate_level = deflate))
-         ! NETCDF4 only
+      if (deflate > 0) then
+         ! NETCDF4 only, does nothing on classic files
+         ! parameters: ncid, varID, shuffle, deflate, deflate_level
+         iret = nf90_def_var_deflate(ncid,varID, 0, 1, deflate_level = deflate)
       end if
       call nchandle_error(nf90_put_att(ncID,VarID,'longname',sx(n,2)))
       call nchandle_error(nf90_put_att(ncID,VarID,'units',sx(n,3)))
@@ -558,6 +566,8 @@ contains
   end subroutine nctiminfo
 
   ! Utility converting year + day to full date
+  ! day = 1 is first day of the year
+  ! hours > 24 advances the day, and day > 365 or 366 advances the year
   subroutine get_date_time(year, day, hours, datetime)
     implicit none
     integer, intent(in)     :: year
@@ -573,7 +583,7 @@ contains
     ss = floor((rh - hh - mm/60.) * 3600)
     dd = hh / 24
     hh = hh - 24 * dd
-    call get_date(year,floor(day) + dd + 1, date)
+    call get_date(year,floor(day) + dd, date)
     datetime(1:3) = date(1:3)
     datetime(4) = hh
     datetime(5) = mm
@@ -581,6 +591,7 @@ contains
   end subroutine get_date_time
 
   ! Utility converting year + day to full date
+  ! day = 1 is first day of the year
   subroutine get_date(year, day, date)
     implicit none
     integer, intent(in)     :: year

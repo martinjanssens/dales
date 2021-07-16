@@ -28,7 +28,7 @@ elseif("$ENV{SYST}" STREQUAL "HYDRA")
   set(CMAKE_Fortran_FLAGS_DEBUG "-traceback -fpe1 -O0 -g -check all" CACHE STRING "")
 elseif("$ENV{SYST}" STREQUAL "FEDORA")
   set(CMAKE_Fortran_COMPILER "mpif90")
-  set(CMAKE_Fortran_FLAGS "-fdefault-real-8 -fdefault-double-8 -march=native -malign-double -ffree-line-length-none -I /usr/lib64/gfortran/modules/mpich/ -std=legacy" CACHE STRING "")
+  set(CMAKE_Fortran_FLAGS "-fdefault-real-8 -fdefault-double-8 -march=native -malign-double -ffree-line-length-none -I /usr/lib64/gfortran/modules/mpich/ -std=gnu -Werror=implicit-interface" CACHE STRING "")
   set (CMAKE_Fortran_FLAGS_RELEASE "-funroll-all-loops -fno-f2c -O3" CACHE STRING "")
   set (CMAKE_Fortran_FLAGS_DEBUG   "-finit-real=nan -fbounds-check -fbacktrace -fno-f2c -O0 -g -ffpe-trap=invalid,zero,overflow" CACHE STRING "")
   set (CMAKE_Fortran_FLAGS_DEV     "-fbounds-check -fbacktrace -fno-f2c -O3 -g -ffpe-trap=invalid,zero,overflow" CACHE STRING "")
@@ -49,7 +49,7 @@ elseif("$ENV{SYST}" STREQUAL "ECMWF-gnu")
   set(CMAKE_Fortran_FLAGS_DEBUG   "-finit-real=nan -fbounds-check -fbacktrace -fno-f2c -O0 -g -ffpe-trap=invalid,zero,overflow" CACHE STRING "")
 elseif("$ENV{SYST}" STREQUAL "gnu-fast")
   set(CMAKE_Fortran_COMPILER "mpif90")
-  set(CMAKE_Fortran_FLAGS "-W -Wall -fdefault-real-8 -fdefault-double-8 -march=native -malign-double -ffree-line-length-none -std=legacy" CACHE STRING "")
+  set(CMAKE_Fortran_FLAGS "-W -Wall -fdefault-real-8 -fdefault-double-8 -march=native -malign-double -ffree-line-length-none -std=gnu -Werror=implicit-interface" CACHE STRING "")
   set (CMAKE_Fortran_FLAGS_RELEASE "-funroll-all-loops -fno-f2c -Ofast -g -fbacktrace" CACHE STRING "")
   set (CMAKE_Fortran_FLAGS_DEBUG   "-finit-real=nan -fbounds-check -fbacktrace -fno-f2c -O0 -g -ffpe-trap=invalid,zero,overflow" CACHE STRING "")
 elseif("$ENV{SYST}" STREQUAL "lisa-intel")
@@ -59,11 +59,12 @@ elseif("$ENV{SYST}" STREQUAL "lisa-intel")
    set(CMAKE_Fortran_FLAGS_DEBUG "-traceback -fpe1 -O0 -g -check all" CACHE STRING "")
 elseif("$ENV{SYST}" STREQUAL "FX-Fujitsu")
    set(CMAKE_Fortran_COMPILER "mpifrtpx")
-   set(CMAKE_Fortran_FLAGS "-Ad -g" CACHE STRING "")
+   set(CMAKE_Fortran_FLAGS "-CcdRR8 -g" CACHE STRING "")
    set (CMAKE_Fortran_FLAGS_RELEASE "-Kfast" CACHE STRING "")
    set (CMAKE_Fortran_FLAGS_DEBUG   "-Haefosux -O2" CACHE STRING "")
    # Fujitsu fortran compiler
-   # -Ad default real is 64 bit
+   # -CcdRR8 default real is 64 bit, like gnu -fdefault-real-8
+   # -Ad (-CcR4R8) is like gnu -freal-4-real-8  ALL reals are 64 bit
    # -Kfast optimization and SVE vectorization
    # -Haefosux checking: s-subscript range, u-undefinied values
    #                     a-argument mismatches, e-shape conformance
@@ -74,7 +75,7 @@ elseif("$ENV{SYST}" STREQUAL "NO_OVERRIDES")
    # don't set any compilation flags here, allows setting them outside CMake
 else()
   set(CMAKE_Fortran_COMPILER "mpif90")
-  set(CMAKE_Fortran_FLAGS "-fdefault-real-8 -fdefault-double-8 -march=native -malign-double -ffree-line-length-none -std=legacy" CACHE STRING "")
+  set(CMAKE_Fortran_FLAGS "-fdefault-real-8 -fdefault-double-8 -march=native -malign-double -ffree-line-length-none -std=gnu -Werror=implicit-interface" CACHE STRING "")
   set (CMAKE_Fortran_FLAGS_RELEASE "-funroll-all-loops -fno-f2c -O3" CACHE STRING "")
   set (CMAKE_Fortran_FLAGS_DEBUG   "-finit-real=nan -fbounds-check -fbacktrace -fno-f2c -O0 -g -ffpe-trap=invalid,zero,overflow" CACHE STRING "")
 endif()
@@ -82,6 +83,7 @@ endif()
 # On compiler options
 # June 2020: added -std=legacy to gfortran for compatibility with gfortran 10, which introduced stricter type checking
 # the old FFT code from Netlib/FFTPACK does not compile with gfortran 10 without this flag.
+# March 2021: fixed interfaces and removed -std=legacy
 
 # For GCC based compilers:
 #  * -march=native   : compile for the current CPU, allows use of modern AVX etc.
@@ -93,8 +95,8 @@ endif()
 PROJECT(DALES Fortran)
 cmake_minimum_required(VERSION 3.2)
 set(VERSION_MAJOR "4")
-set(VERSION_MINOR "2")
-set(VERSION_PATCH "1")
+set(VERSION_MINOR "3")
+set(VERSION_PATCH "0")
 
 # use nf-config to find paths to netcdf. Broken on Fedora due to module path missing.
 execute_process(COMMAND nf-config --prefix OUTPUT_VARIABLE NFCONFIG_PREFIX OUTPUT_STRIP_TRAILING_WHITESPACE)
@@ -149,7 +151,7 @@ FIND_LIBRARY(NETCDF_FORTRAN_LIB netcdff
 )
 
 # libHYPRE.a for static library
-FIND_LIBRARY(HYPRE_LIB HYPRE
+FIND_LIBRARY(HYPRE_LIB HYPRE_core HYPRE
   PATHS
   $ENV{HYPRE_LIB}
   ${ADDMODULEPATH}/lib

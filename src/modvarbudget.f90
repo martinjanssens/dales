@@ -126,7 +126,6 @@ contains
     qt2bf     = 0.
 
     qtpmcr0 = 0.
-
     if(myid==0 .and. .not. lwarmstart) then
        open (ifoutput,file='varbudget.'//cexpnr,status='replace')
        close (ifoutput)
@@ -195,6 +194,7 @@ contains
     use modglobal     , only : i1,j1,ih,jh,k1,cp,ijtot, &
                                iadv_thl,iadv_qt
     use modmpi        , only : slabsum
+
     implicit none
 
   ! Set av values to zero
@@ -263,12 +263,21 @@ contains
                                dzf,dzh,ijtot,dx2i,dy2i,cu,cv, &
                                iadv_cd2,iadv_5th,iadv_52,     &
                                iadv_cd6,iadv_62,iadv_kappa
-                               
-    use modsubgriddata, only : ekh, anis_fac
+    use modsubgriddata, only : ekh
     use modsubgrid,     only : diffc
-    use modfields,      only : u0,v0,w0,u0av,v0av,rhobh,rhobf
+    use modfields,      only : u0,v0,w0,u0av,v0av
     use modmpi,         only : comm3d,my_real,mpi_sum,mpierr, &
                                slabsum
+    use mpi,             only : mpi_allreduce
+    use advec_2nd,      only : advecc_2nd
+    use advec_52,       only : advecc_52
+    use advec_5th,      only : advecc_5th
+    use advec_62,       only : advecc_62
+    use advec_6th,      only : advecc_6th
+    use advec_hybrid,   only : advecc_hybrid
+    use advec_hybrid_f, only : advecc_hybrid_f
+    use advec_kappa,    only : advecc_kappa
+    use advec_upw,      only : advecc_upw
     implicit none
 
     integer i,j,k,im,ip,jm,jp,km,kp       !counter variables
@@ -498,7 +507,6 @@ contains
 
     call slabsum(disf ,1,k1,dumfield ,2-ih,i1+ih,2-jh,j1+jh,1,k1,2,i1,2,j1,1,k1)
     disf = disf/ijtot
-
 
     ! Vertical dissipation
     term = 0.
@@ -811,5 +819,3 @@ contains
 
 
 end module modvarbudget
-
-
