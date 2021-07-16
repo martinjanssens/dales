@@ -263,12 +263,12 @@ contains
                                dzf,dzh,ijtot,dx2i,dy2i,cu,cv, &
                                iadv_cd2,iadv_5th,iadv_52,     &
                                iadv_cd6,iadv_62,iadv_kappa
-    use modsubgriddata, only : ekh
+    use modsubgriddata, only : ekh, anis_fac
     use modsubgrid,     only : diffc
-    use modfields,      only : u0,v0,w0,u0av,v0av
+    use modfields,      only : u0,v0,w0,u0av,v0av,rhobh,rhobf
     use modmpi,         only : comm3d,my_real,mpi_sum,mpierr, &
                                slabsum
-    use mpi,             only : mpi_allreduce
+    use mpi,            only : mpi_allreduce
     use advec_2nd,      only : advecc_2nd
     use advec_52,       only : advecc_52
     use advec_5th,      only : advecc_5th
