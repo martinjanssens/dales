@@ -532,7 +532,7 @@ contains
 
                 Tnr = Tnr - (thlguess-thl0(i,j,k))/((thlguess-thlguessmin)*500.)
               enddo
-              if(niter>99) then
+              if(niter > 99) then
                 write(*,*) 'thermowarning: i,j,k,thl0(i,j,k),qt0(i,j,k)'
                 write(*,*) i,j,k,thl0(i,j,k),qt0(i,j,k)
               endif
@@ -560,9 +560,6 @@ contains
       end do
       end do
       end do
-!      if(nitert>99) then
-!      write(*,*) 'thermowarning'
-!      endif
 
   end subroutine icethermo0
 
