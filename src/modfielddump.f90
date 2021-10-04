@@ -34,7 +34,7 @@ private
 PUBLIC :: initfielddump, fielddump,exitfielddump
 save
 !NetCDF variables
-  integer :: nvar = 8
+  integer :: nvar = 9
   integer :: ncid,nrec = 0
   character(80) :: fname = 'fielddump.xxx.xxx.xxx.nc'
   character(80),dimension(:,:), allocatable :: ncname
@@ -113,9 +113,10 @@ contains
 !       call ncinfo(ncname( 7,:),'qr','Rain water mixing ratio','1e-5kg/kg','tttt')
       call ncinfo(ncname( 7,:),'buoy','Buoyancy','K','tttt')
       call ncinfo(ncname( 8,:),'e12','Square root of SFS TKE','m/s','tttt')
+      call ncinfo(ncname( 9,:),'p','Normalised pressure fluctuation','m^2/s^2','tttt')
       do n=1,nsv
         write (csvname(1:3),'(i3.3)') n
-        call ncinfo(ncname(8+n,:),'sv'//csvname,'Scalar '//csvname//' specific concentration','(kg/kg)','tttt')
+        call ncinfo(ncname(9+n,:),'sv'//csvname,'Scalar '//csvname//' specific concentration','(kg/kg)','tttt')
       end do
       call open_nc(fname,  ncid,nrec,n1=ceiling(1.0*imax/ncoarse),n2=ceiling(1.0*jmax/ncoarse),n3=khigh-klow+1)
       if (nrec==0) then
@@ -129,10 +130,11 @@ contains
 
 !> Do fielddump. Collect data to truncated (2 byte) integers, and write them to file
   subroutine fielddump
-    use modfields, only : u0,v0,w0,thl0,qt0,ql0,sv0,thv0h,thvh,e120
+    use modfields, only : u0,v0,w0,thl0,qt0,ql0,sv0,thv0h,thvh,e120,rhobf
     use modsurfdata,only : thls,qts,thvs
     use modglobal, only : imax,i1,ih,jmax,j1,jh,k1,rk3step,&
                           timee,dt_lim,cexpnr,ifoutput,rtimee
+    use modpois, only : p
     use modmpi,    only : myid,cmyidx, cmyidy
     use modstat_nc, only : lnetcdf, writestat_nc
     use modmicrodata, only : iqr, imicro, imicro_none
@@ -143,6 +145,7 @@ contains
     integer i,j,k
     integer :: writecounter = 1
     integer :: reclength
+    real :: twothree = 2./3
 
 
     if (.not. lfielddump) return
@@ -308,7 +311,50 @@ contains
       close (ifoutput)
     end if
 
-    if (lnetcdf) vars(:,:,:,9:nvar) = sv0(2:i1:ncoarse,2:j1:ncoarse,klow:khigh,:)
+    field=0.
+    do i=2-ih,i1+ih
+    do j=2-jh,j1+jh
+    do k=2,k1
+      field(i,j,k) = NINT(1.0E2*(p(i,j,k) - twothree*e120(i,j,k))*e120(i,j,k))
+    enddo
+    enddo
+    enddo
+
+    if (lnetcdf) vars(:,:,:,9) = p(2:i1:ncoarse,2:j1:ncoarse,klow:khigh) - twothree*e120(2:i1:ncoarse,2:j1:ncoarse,klow:khigh)*e120(2:i1:ncoarse,2:j1:ncoarse,klow:khigh)
+!     print *, vars(2,33,80,8)
+!     if (lnetcdf) then 
+!       do i=2,i1,ncoarse
+!       do j=2,j1,ncoarse
+!       do k=klow,khigh
+!         if (cmyidx == '000' .and. cmyidy == '000') then
+!           print *, i,j,k
+!           print *, vars(i,j,k,9)
+!         end if
+!         vars(i,j,k,9) = 0.!(p(i,j,k) - twothree*e120(i,j,k))*rhobf(k)
+!       end do
+!       end do
+!       end do
+!     end if
+    do i=2-ih,i1+ih, ncoarse
+    do j=2-jh,j1+jh, ncoarse
+    do k=2,k1
+      field(i,j,k) = NINT(1.0E2*(p(i,j,k) - twothree*e120(i,j,k))*e120(i,j,k))
+    enddo
+    enddo
+    enddo
+
+    if (lbinary) then
+      if (ldiracc) then
+        open (ifoutput,file='wbp.'//cmyidx//'.'//cmyidy//'.'//cexpnr,access='direct', form='unformatted', recl=reclength)
+        write (ifoutput, rec=writecounter) field(2:i1:ncoarse,2:j1:ncoarse,klow:khigh)
+      else
+        open  (ifoutput,file='wbp.'//cmyidx//'.'//cmyidy//'.'//cexpnr,form='unformatted',position='append')
+        write (ifoutput) (((field(i,j,k),i=2,i1, ncoarse),j=2,j1, ncoarse),k=klow,khigh)
+      end if
+      close (ifoutput)
+    endif
+
+    if (lnetcdf) vars(:,:,:,10:nvar) = sv0(2:i1:ncoarse,2:j1:ncoarse,klow:khigh,:)
 
     if(lnetcdf) then
       call writestat_nc(ncid,1,tncname,(/rtimee/),nrec,.true.)
