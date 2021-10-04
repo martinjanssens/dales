@@ -113,7 +113,7 @@ contains
 !       call ncinfo(ncname( 7,:),'qr','Rain water mixing ratio','1e-5kg/kg','tttt')
       call ncinfo(ncname( 7,:),'buoy','Buoyancy','K','tttt')
       call ncinfo(ncname( 8,:),'e12','Square root of SFS TKE','m/s','tttt')
-      call ncinfo(ncname( 9,:),'p','Pressure fluctuation','Pa','tttt')
+      call ncinfo(ncname( 9,:),'p','Normalised pressure fluctuation','m^2/s^2','tttt')
       do n=1,nsv
         write (csvname(1:3),'(i3.3)') n
         call ncinfo(ncname(9+n,:),'sv'//csvname,'Scalar '//csvname//' specific concentration','(kg/kg)','tttt')
@@ -315,24 +315,30 @@ contains
     do i=2-ih,i1+ih
     do j=2-jh,j1+jh
     do k=2,k1
-      field(i,j,k) = NINT(1.0E2*(p(i,j,k) - twothree*e120(i,j,k))*rhobf(k),2)
+      field(i,j,k) = NINT(1.0E2*(p(i,j,k) - twothree*e120(i,j,k))*e120(i,j,k))
     enddo
     enddo
     enddo
 
-    if (lnetcdf) then 
-      do i=2,i1,ncoarse
-      do j=2,j1,ncoarse
-      do k=klow,khigh
-        vars(i,j,k,9) = (p(i,j,k) - twothree*e120(i,j,k))*rhobf(k)
-      end do
-      end do
-      end do
-    end if
+    if (lnetcdf) vars(:,:,:,9) = p(2:i1:ncoarse,2:j1:ncoarse,klow:khigh) - twothree*e120(2:i1:ncoarse,2:j1:ncoarse,klow:khigh)*e120(2:i1:ncoarse,2:j1:ncoarse,klow:khigh)
+!     print *, vars(2,33,80,8)
+!     if (lnetcdf) then 
+!       do i=2,i1,ncoarse
+!       do j=2,j1,ncoarse
+!       do k=klow,khigh
+!         if (cmyidx == '000' .and. cmyidy == '000') then
+!           print *, i,j,k
+!           print *, vars(i,j,k,9)
+!         end if
+!         vars(i,j,k,9) = 0.!(p(i,j,k) - twothree*e120(i,j,k))*rhobf(k)
+!       end do
+!       end do
+!       end do
+!     end if
     do i=2-ih,i1+ih, ncoarse
     do j=2-jh,j1+jh, ncoarse
     do k=2,k1
-      field(i,j,k) = NINT(1.0E2*(p(i,j,k) - twothree*e120(i,j,k))*rhobf(k),2)
+      field(i,j,k) = NINT(1.0E2*(p(i,j,k) - twothree*e120(i,j,k))*e120(i,j,k))
     enddo
     enddo
     enddo
