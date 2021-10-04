@@ -321,8 +321,8 @@ contains
     enddo
 
     if (lnetcdf) then 
-      do i=2-ih,i1+ih
-      do j=2-jh,j1+jh
+      do i=2,i1,ncoarse
+      do j=2,j1,ncoarse
       do k=klow,khigh
         vars(i,j,k,9) = (p(i,j,k) - twothree*e120(i,j,k))*rhobf(k)
       end do
