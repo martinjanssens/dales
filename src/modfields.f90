@@ -24,110 +24,106 @@
 !
 
 module modfields
+use modprecision
 
 implicit none
 save
 
   ! Prognostic variables
 
-  real, allocatable :: um(:,:,:)        !<   x-component of velocity at time step t-1
-  real, allocatable :: vm(:,:,:)        !<   y-component of velocity at time step t-1
-  real, allocatable :: wm(:,:,:)        !<   z-component of velocity at time step t-1
-  real, allocatable :: thlm(:,:,:)      !<   liq. water pot. temperature at time step t-1
-  real, allocatable :: e12m(:,:,:)      !<   square root of turb. kin. energy at time step t-1
-  real, allocatable :: qtm(:,:,:)       !<   total specific humidity at time step t
-  real, allocatable :: u0(:,:,:)        !<   x-component of velocity at time step t
-  real, allocatable :: v0(:,:,:)        !<   y-component of velocity at time step t
-  real, allocatable :: w0(:,:,:)        !<   z-component of velocity at time step t
-  real, allocatable :: thl0(:,:,:)      !<   liq. water pot. temperature at time step t
-  real, allocatable :: thl0h(:,:,:)     !<  3d-field of theta_l at half levels for kappa scheme
-  real, allocatable :: qt0h(:,:,:)      !<  3d-field of q_tot   at half levels for kappa scheme
-  real, allocatable :: e120(:,:,:)      !<   square root of turb. kin. energy at time step t
-  real, allocatable :: qt0(:,:,:)       !<   total specific humidity at time step t
+  real(field_r), allocatable :: um(:,:,:)        !<   x-component of velocity at time step t-1
+  real(field_r), allocatable :: vm(:,:,:)        !<   y-component of velocity at time step t-1
+  real(field_r), allocatable :: wm(:,:,:)        !<   z-component of velocity at time step t-1
+  real(field_r), allocatable :: thlm(:,:,:)      !<   liq. water pot. temperature at time step t-1
+  real(field_r), allocatable :: e12m(:,:,:)      !<   square root of turb. kin. energy at time step t-1
+  real(field_r), allocatable :: qtm(:,:,:)       !<   total specific humidity at time step t
+  real(field_r), allocatable :: u0(:,:,:)        !<   x-component of velocity at time step t
+  real(field_r), allocatable :: v0(:,:,:)        !<   y-component of velocity at time step t
+  real(field_r), allocatable :: w0(:,:,:)        !<   z-component of velocity at time step t
+  real(field_r), allocatable :: thl0(:,:,:)      !<   liq. water pot. temperature at time step t
+  real(field_r), allocatable :: thl0h(:,:,:)     !<  3d-field of theta_l at half levels for kappa scheme
+  real(field_r), allocatable :: qt0h(:,:,:)      !<  3d-field of q_tot   at half levels for kappa scheme
+  real(field_r), allocatable :: e120(:,:,:)      !<   square root of turb. kin. energy at time step t
+  real(field_r), allocatable :: qt0(:,:,:)       !<   total specific humidity at time step t
 
-  real, allocatable :: up(:,:,:)        !<   tendency of um
-  real, allocatable :: vp(:,:,:)        !<   tendency of vm
-  real, allocatable :: wp(:,:,:)        !<   tendency of wm
-  real, allocatable :: thlp(:,:,:)      !<   tendency of thlm
-  real, allocatable :: e12p(:,:,:)      !<   tendency of e12m
-  real, allocatable :: qtp(:,:,:)       !<   tendency of qtm
+  real(field_r), allocatable :: up(:,:,:)        !<   tendency of um
+  real(field_r), allocatable :: vp(:,:,:)        !<   tendency of vm
+  real(field_r), allocatable :: wp(:,:,:)        !<   tendency of wm
+  real(field_r), allocatable :: thlp(:,:,:)      !<   tendency of thlm
+  real(field_r), allocatable :: e12p(:,:,:)      !<   tendency of e12m
+  real(field_r), allocatable :: qtp(:,:,:)       !<   tendency of qtm
 
-  real, allocatable :: svm(:,:,:,:)   !<  scalar sv(n) at time step t-1
-  real, allocatable :: sv0(:,:,:,:)   !<  scalar sv(n) at time step t
-  real, allocatable :: svp(:,:,:,:)   !<  tendency of sv(n)
+  real(field_r), allocatable :: svm(:,:,:,:)   !<  scalar sv(n) at time step t-1
+  real(field_r), allocatable :: sv0(:,:,:,:)   !<  scalar sv(n) at time step t
+  real(field_r), allocatable :: svp(:,:,:,:)   !<  tendency of sv(n)
 
   ! Base state variables
-  real, allocatable :: rhobf(:)       !<   Base state density, full level
-  real, allocatable :: rhobh(:)       !<   Base state density, half level
+  real(field_r), allocatable :: rhobf(:)       !<   Base state density, full level
+  real(field_r), allocatable :: rhobh(:)       !<   Base state density, half level
 
-  real, allocatable :: drhobdzf(:)       !<   Base state density, derivative at full level
-  real, allocatable :: drhobdzh(:)       !<   Base state density, derivative at half level
+  real(field_r), allocatable :: drhobdzf(:)       !<   Base state density, derivative at full level
+  real(field_r), allocatable :: drhobdzh(:)       !<   Base state density, derivative at half level
 
   ! Cloud edge variables
-  real, allocatable :: ql0(:,:,:)  !<   liquid water content
-  real, allocatable :: tmp0(:,:,:) !<   temperature at full level
-  real, allocatable :: thv0h(:,:,:)!<   theta_v at half level
 
-  real, allocatable :: whls(:)                       !<   large scale vert velocity at half levels
+  real(field_r), allocatable :: ql0(:,:,:)  !<   liquid water content
+  real(field_r), allocatable :: thv0h(:,:,:)!<   theta_v at half level
 
-  real, allocatable :: presf(:)                      !<   hydrostatic pressure at full level
-  real, allocatable :: presh(:)                      !<   hydrostatic pressure at half level
-  real, allocatable :: initial_presf(:)              !<   initial hydrostatic pressure at full level
-  real, allocatable :: initial_presh(:)              !<   initial hydrostatic pressure at half level
-  real, allocatable :: exnf(:)                       !<   hydrostatic exner function at full level
-  real, allocatable :: exnh(:)                       !<   hydrostatic exner function at half level
-  real, allocatable :: thvf(:)                       !<   hydrostatic thetav at full level
-  real, allocatable :: thvh(:)                       !<   hydrostatic thetav at half level
-  real, allocatable :: rhof(:)                       !<   slab averaged density at full level
-  real, allocatable :: qt0av(:)                      !<   slab averaged q_tot
-  real, allocatable :: ql0av(:)                      !<   slab averaged q_liq
+  real(field_r), allocatable :: whls(:)                       !<   large scale vert velocity at half levels
 
-  real, allocatable :: thl0av(:)                     !<   slab averaged th_liq
-  real, allocatable :: u0av(:)                       !<   slab averaged u
-  real, allocatable :: v0av(:)                       !<   slab averaged v
-  real, allocatable :: ug(:)                       !<   geostrophic u-wind
-  real, allocatable :: vg(:)                       !<   geostrophic v-wind
+  real(field_r), allocatable :: presf(:)                      !<   hydrostatic pressure at full level
+  real(field_r), allocatable :: presh(:)                      !<   hydrostatic pressure at half level
+  real(field_r), allocatable :: initial_presf(:)              !<   initial hydrostatic pressure at full level
+  real(field_r), allocatable :: initial_presh(:)              !<   initial hydrostatic pressure at half level
+  real(field_r), allocatable :: exnf(:)                       !<   hydrostatic exner function at full level
+  real(field_r), allocatable :: exnh(:)                       !<   hydrostatic exner function at half level
+  real(field_r), allocatable :: thvf(:)                       !<   hydrostatic thetav at full level
+  real(field_r), allocatable :: thvh(:)                       !<   hydrostatic thetav at half level
+  real(field_r), allocatable :: rhof(:)                       !<   slab averaged density at full level
+  real(field_r), allocatable :: qt0av(:)                      !<   slab averaged q_tot
+  real(field_r), allocatable :: ql0av(:)                      !<   slab averaged q_liq
 
-  real, allocatable :: dpdxl(:)                      !<   large scale pressure x-gradient
-  real, allocatable :: dpdyl(:)                      !<   large scale pressure y-gradient
+  real(field_r), allocatable :: thl0av(:)                     !<   slab averaged th_liq
+  real(field_r), allocatable :: u0av(:)                       !<   slab averaged u
+  real(field_r), allocatable :: v0av(:)                       !<   slab averaged v
+  real(field_r), allocatable :: ug(:)                       !<   geostrophic u-wind
+  real(field_r), allocatable :: vg(:)                       !<   geostrophic v-wind
 
-  real, allocatable :: dthldxls(:)                   !<   large scale x-gradient of th_liq
-  real, allocatable :: dthldyls(:)                   !<   large scale y-gradient of th_liq
-  real, allocatable :: dthldtls(:)                   !<   large scale tendency of thl
+  real(field_r), allocatable :: dpdxl(:)                      !<   large scale pressure x-gradient
+  real(field_r), allocatable :: dpdyl(:)                      !<   large scale pressure y-gradient
 
-  real, allocatable :: dqtdxls(:)                    !<   large scale x-gradient of q_tot
-  real, allocatable :: dqtdyls(:)                    !<   large scale y-gradient of q_tot
-  real, allocatable :: dqtdtls(:)                    !<   large scale tendency of q_tot
+  real(field_r), allocatable :: dthldxls(:)                   !<   large scale x-gradient of th_liq
+  real(field_r), allocatable :: dthldyls(:)                   !<   large scale y-gradient of th_liq
+  real(field_r), allocatable :: dthldtls(:)                   !<   large scale tendency of thl
 
-  real, allocatable :: dudxls(:)                     !<   large scale x-gradient of u
-  real, allocatable :: dudyls(:)                     !<   large scale y-gradient of u
-  real, allocatable :: dudtls(:)                     !<   large scale tendency of u
+  real(field_r), allocatable :: dqtdxls(:)                    !<   large scale x-gradient of q_tot
+  real(field_r), allocatable :: dqtdyls(:)                    !<   large scale y-gradient of q_tot
+  real(field_r), allocatable :: dqtdtls(:)                    !<   large scale tendency of q_tot
 
-  real, allocatable :: dvdxls(:)                     !<   large scale x-gradient of v
-  real, allocatable :: dvdyls(:)                     !<   large scale y-gradient of v
-  real, allocatable :: dvdtls(:)                     !<   large scale tendency of v
+  real(field_r), allocatable :: dudxls(:)                     !<   large scale x-gradient of u
+  real(field_r), allocatable :: dudyls(:)                     !<   large scale y-gradient of u
+  real(field_r), allocatable :: dudtls(:)                     !<   large scale tendency of u
 
-  real, allocatable :: wfls  (:)                     !<   large scale vertical velocity
-  real, allocatable :: ql0h(:,:,:)
-  real, allocatable :: dthvdz(:,:,:)!<   theta_v at half level
+  real(field_r), allocatable :: dvdxls(:)                     !<   large scale x-gradient of v
+  real(field_r), allocatable :: dvdyls(:)                     !<   large scale y-gradient of v
+  real(field_r), allocatable :: dvdtls(:)                     !<   large scale tendency of v
 
-  real, allocatable :: thlprof(:)                    !<   initial thl-profile
-  real, allocatable :: qtprof(:)                     !<   initial qt-profile
-  real, allocatable :: uprof(:)                      !<   initial u-profile
-  real, allocatable :: vprof(:)                      !<   initial v-profile
-  real, allocatable :: e12prof(:)                    !<   initial subgrid sqrt(TKE) profile
-  real, allocatable :: sv0av(:,:)                  !<   slab average of sv(n)
-  real, allocatable :: svprof(:,:)                 !<   initial sv(n)-profile
+  real(field_r), allocatable :: wfls  (:)                     !<   large scale vertical velocity
+  real(field_r), allocatable :: ql0h(:,:,:)
+  real(field_r), allocatable :: dthvdz(:,:,:)!<   theta_v at half level
 
-  real, allocatable :: thlpcar(:)                    !< prescribed radiatively forced thl tendency
-  real, allocatable :: SW_up_TOA(:,:), SW_dn_TOA(:,:), LW_up_TOA(:,:), LW_dn_TOA(:,:)
-  real, allocatable :: qvsl(:,:,:)
-  real, allocatable :: qvsi(:,:,:)
-  real, allocatable :: esl(:,:,:)
+  real(field_r), allocatable :: thlprof(:)                    !<   initial thl-profile
+  real(field_r), allocatable :: qtprof(:)                     !<   initial qt-profile
+  real(field_r), allocatable :: uprof(:)                      !<   initial u-profile
+  real(field_r), allocatable :: vprof(:)                      !<   initial v-profile
+  real(field_r), allocatable :: e12prof(:)                    !<   initial subgrid sqrt(TKE) profile
+  real(field_r), allocatable :: sv0av(:,:)                  !<   slab average of sv(n)
+  real(field_r), allocatable :: svprof(:,:)                 !<   initial sv(n)-profile
 
-  real, allocatable :: qsat(:,:,:)
-  real, allocatable :: surf_rain(:,:)               !< integrated surface rain 
+  real(field_r), allocatable :: thlpcar(:)                    !< prescribed radiatively forced thl tendency
+  real(field_r), allocatable :: SW_up_TOA(:,:), SW_dn_TOA(:,:), LW_up_TOA(:,:), LW_dn_TOA(:,:)
 
+  real(field_r), allocatable :: surf_rain(:,:)               !< integrated surface rain 
 contains
 !> Allocate and initialize the prognostic variables
 subroutine initfields
@@ -173,7 +169,6 @@ subroutine initfields
     ! Allocation of diagnostic variables
     allocate(ql0   (2-ih:i1+ih,2-jh:j1+jh,k1))
     allocate(ql0h  (2-ih:i1+ih,2-jh:j1+jh,k1))
-    allocate(tmp0  (2-ih:i1+ih,2-jh:j1+jh,k1))
     allocate(thv0h (2-ih:i1+ih,2-jh:j1+jh,k1))
     allocate(dthvdz(2-ih:i1+ih,2-jh:j1+jh,k1))
 
@@ -228,11 +223,6 @@ subroutine initfields
     allocate(LW_up_TOA(2-ih:i1+ih,2-jh:j1+jh))
     allocate(LW_dn_TOA(2-ih:i1+ih,2-jh:j1+jh))
 
-    allocate (qvsl(2-ih:i1+ih,2-jh:j1+jh,k1)    & ! qv-liquid
-             ,qvsi(2-ih:i1+ih,2-jh:j1+jh,k1)    & ! qv-ice
-             ,esl (2-ih:i1+ih,2-jh:j1+jh,k1)    & ! es-liquid
-             ,qsat(2-ih:i1+ih,2-jh:j1+jh,k1))
-
     allocate(surf_rain(2-ih:i1+ih,2-jh:j1+jh))
 
     um=0.;u0=0.;up=0.
@@ -244,7 +234,7 @@ subroutine initfields
     svm=0.;sv0=0.;svp=0.
 
     rhobf=0.;rhobh=0.;drhobdzf=0.;drhobdzh=0.
-    ql0=0.;tmp0=0.;ql0h=0.;thv0h=0.;thl0h=0.;qt0h=0.
+    ql0=0.;ql0h=0.;thv0h=0.;thl0h=0.;qt0h=0.
     presf=0.;presh=0.;exnf=0.;exnh=0.;thvh=0.;thvf=0.;rhof=0.    ! OG
     qt0av=0.;ql0av=0.;thl0av=0.;u0av=0.;v0av=0.;sv0av=0.
     thlprof=0.;qtprof=0.;uprof=0.;vprof=0.;e12prof=0.;svprof=0.
@@ -256,8 +246,6 @@ subroutine initfields
     dvdxls=0.;dvdyls=0.;dvdtls=0.
     dthvdz=0.
     SW_up_TOA=0.;SW_dn_TOA=0.;LW_up_TOA=0.;LW_dn_TOA=0.
-    qvsl=0.;qvsi=0.;esl=0.
-    qsat=0.
 
     surf_rain = 0
   end subroutine initfields
@@ -270,15 +258,13 @@ subroutine initfields
     deallocate(svm,sv0,svp)
     deallocate(rhobf,rhobh)
     deallocate(drhobdzf,drhobdzh)
-    deallocate(ql0,tmp0,ql0h,thv0h,dthvdz,whls,presf,presh,initial_presf,initial_presh,exnf,exnh,thvh,thvf,rhof,qt0av,ql0av,thl0av,u0av,v0av)
+    deallocate(ql0,ql0h,thv0h,dthvdz,whls,presf,presh,initial_presf,initial_presh,exnf,exnh,thvh,thvf,rhof,qt0av,ql0av,thl0av,u0av,v0av)
     deallocate(ug,vg,dpdxl,dpdyl,wfls)
     deallocate(dthldxls,dthldyls,dthldtls,dqtdxls,dqtdyls,dqtdtls)
     deallocate(dudxls,dudyls,dudtls,dvdxls,dvdyls,dvdtls)
     deallocate(thlprof,qtprof,uprof,vprof,e12prof,sv0av,svprof)
     deallocate(thlpcar)
     deallocate(SW_up_TOA,SW_dn_TOA,LW_up_TOA,LW_dn_TOA)
-    deallocate(qvsl,qvsi,esl)
-    deallocate(qsat)
     deallocate(surf_rain)
     end subroutine exitfields
 

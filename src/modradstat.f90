@@ -30,6 +30,7 @@
 module modradstat
 
   use modglobal, only : longint
+  use modprecision, only: field_r
 
 implicit none
 !private
@@ -48,14 +49,14 @@ save
 !     ------
 
 !   --------------
-  real, allocatable :: thltendav(:)
-  real, allocatable :: thllwtendav(:)
-  real, allocatable :: thlswtendav(:)
+  real(field_r), allocatable :: thltendav(:)
+  real(field_r), allocatable :: thllwtendav(:)
+  real(field_r), allocatable :: thlswtendav(:)
   real, allocatable :: lwuav(:)
   real, allocatable :: lwdav(:)
   real, allocatable :: swdav(:)
-  real, allocatable :: swdirav(:)
-  real, allocatable :: swdifav(:)
+  real(field_r), allocatable :: swdirav(:)
+  real(field_r), allocatable :: swdifav(:)
   real, allocatable :: swuav(:)
   real, allocatable :: lwucaav(:)
   real, allocatable :: lwdcaav(:)
@@ -81,8 +82,7 @@ save
 contains
 !> Initialization routine, reads namelists and inits variables
   subroutine initradstat
-    use mpi
-    use modmpi,    only : myid,mpierr, comm3d,my_real, mpi_logical
+    use modmpi,    only : myid,mpierr, comm3d, mpi_logical,D_MPI_BCAST
     use modglobal, only : dtmax, k1, ifnamopt,fname_options, ifoutput,&
                           cexpnr,dtav_glob,timeav_glob,ladaptive,dt_lim,btime,tres,lwarmstart,checknamelisterror
     use modstat_nc, only : lnetcdf,define_nc,ncinfo
@@ -104,10 +104,10 @@ contains
       close(ifnamopt)
     end if
 
-    call MPI_BCAST(timeav     ,1,MY_REAL   ,0,comm3d,mpierr)
-    call MPI_BCAST(dtav       ,1,MY_REAL   ,0,comm3d,mpierr)
-    call MPI_BCAST(lstat   ,1,MPI_LOGICAL,0,comm3d,mpierr)
-    call MPI_BCAST(lradclearair,1,MPI_LOGICAL,0,comm3d,mpierr)
+    call D_MPI_BCAST(timeav      ,1,0,comm3d,mpierr)
+    call D_MPI_BCAST(dtav        ,1,0,comm3d,mpierr)
+    call D_MPI_BCAST(lstat       ,1,0,comm3d,mpierr)
+    call D_MPI_BCAST(lradclearair,1,0,comm3d,mpierr)
     idtav = dtav/tres
     itimeav = timeav/tres
 

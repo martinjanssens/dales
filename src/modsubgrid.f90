@@ -30,6 +30,7 @@
 
 module modsubgrid
 use modsubgriddata
+use modprecision, only: field_r
 implicit none
 save
   public :: subgrid, initsubgrid, exitsubgrid, subgridnamelist
@@ -37,7 +38,6 @@ save
 contains
   subroutine initsubgrid
     use modglobal, only : ih,i1,jh,j1,k1,delta,deltai,dx,dy,zf,dzf,fkar,pi
-    use mpi
     use modmpi, only : myid
 
     implicit none
@@ -116,8 +116,7 @@ contains
 
   subroutine subgridnamelist
     use modglobal, only : ifnamopt,fname_options,checknamelisterror
-    use mpi
-    use modmpi,    only : myid, comm3d, mpierr, my_real, mpi_logical
+    use modmpi,    only : myid, comm3d, mpierr, mpi_logical, D_MPI_BCAST
 
     implicit none
 
@@ -136,18 +135,18 @@ contains
       close(ifnamopt)
     end if
 
-    call MPI_BCAST(ldelta     ,1,MPI_LOGICAL,0,comm3d,mpierr)
-    call MPI_BCAST(lmason     ,1,MPI_LOGICAL,0,comm3d,mpierr)
-    call MPI_BCAST(nmason     ,1,MY_REAL    ,0,comm3d,mpierr)
-    call MPI_BCAST(lsmagorinsky,1,MPI_LOGICAL,0,comm3d,mpierr)
-    call MPI_BCAST(lanisotrop ,1,MPI_LOGICAL,0,comm3d,mpierr)
-    call MPI_BCAST(cs         ,1,MY_REAL   ,0,comm3d,mpierr)
-    call MPI_BCAST(cf         ,1,MY_REAL   ,0,comm3d,mpierr)
-    call MPI_BCAST(cn         ,1,MY_REAL   ,0,comm3d,mpierr)
-    call MPI_BCAST(Rigc       ,1,MY_REAL   ,0,comm3d,mpierr)
-    call MPI_BCAST(Prandtl    ,1,MY_REAL   ,0,comm3d,mpierr)
-    call MPI_BCAST(sgs_surface_fix ,1,MPI_LOGICAL   ,0,comm3d,mpierr)
-    call MPI_BCAST(ch1        ,1,MY_REAL   ,0,comm3d,mpierr)
+    call D_MPI_BCAST(ldelta          ,1, 0,comm3d,mpierr)
+    call D_MPI_BCAST(lmason          ,1, 0,comm3d,mpierr)
+    call D_MPI_BCAST(lsmagorinsky    ,1, 0,comm3d,mpierr)
+    call D_MPI_BCAST(lanisotrop      ,1, 0,comm3d,mpierr)
+    call D_MPI_BCAST(sgs_surface_fix ,1, 0,comm3d,mpierr)
+    call D_MPI_BCAST(nmason          ,1, 0,comm3d,mpierr)
+    call D_MPI_BCAST(cs              ,1, 0,comm3d,mpierr)
+    call D_MPI_BCAST(cf              ,1, 0,comm3d,mpierr)
+    call D_MPI_BCAST(cn              ,1, 0,comm3d,mpierr)
+    call D_MPI_BCAST(Rigc            ,1, 0,comm3d,mpierr)
+    call D_MPI_BCAST(Prandtl         ,1, 0,comm3d,mpierr)
+    call D_MPI_BCAST(ch1             ,1, 0,comm3d,mpierr)
 
   end subroutine subgridnamelist
 
@@ -309,45 +308,71 @@ contains
 
   ! do TKE scheme
   else
-    do k=1,kmax
-      do j=2,j1
-        do i=2,i1
-          zlt(i,j,k) = delta(k)
-          if (ldelta .or. (dthvdz(i,j,k)<=0)) then
-            if (lmason) zlt(i,j,k) = (1. / zlt(i,j,k) ** nmason + 1. / ( fkar * (zf(k) + z0m(i,j)))**nmason) ** (-1./nmason)
-            if (lanisotrop) zlt(i,j,k) = dzf(k)
-            ekm(i,j,k) = cm * zlt(i,j,k) * e120(i,j,k)
-            ekh(i,j,k) = (ch1 + ch2) * ekm(i,j,k)
+     if ((.not. lmason) .and. (.not. lanisotrop) .and. (.not. ldelta)) then
+        ! fast path for one specific case, no ifs in loop.
+        do k=1,kmax
+           do j=2,j1
+              do i=2,i1
+                 zlt(i,j,k) = min(delta(k), &
+                      cn*e120(i,j,k) / sqrt( grav/thvf(k) * abs(dthvdz(i,j,k))) + &
+                      delta(k) * (1.0-sign(1.0_field_r,dthvdz(i,j,k))))
+                 ! the last row is 0 if dthvdz(i,j,k) > 0, else 2*delta(k)
+                 ! ensuring that zlt(i,j,k) = delta(k) when dthvdz < 0, as
+                 ! in the original scheme.
 
-            ekm(i,j,k) = max(ekm(i,j,k),ekmin)
-            ekh(i,j,k) = max(ekh(i,j,k),ekmin)
-          else
-             ! zlt(i,j,k) = min(delta(k),cn*e120(i,j,k)/sqrt(grav/thvf(k)*abs(dthvdz(i,j,k))))
-             ! faster calculation: evaluate sqrt only if the second argument is actually smaller
-             if ( grav*abs(dthvdz(i,j,k)) * delta(k)**2 > (cn*e120(i,j,k))**2 * thvf(k) ) then
-                zlt(i,j,k) = cn*e120(i,j,k)/sqrt(grav/thvf(k)*abs(dthvdz(i,j,k)))
-             end if
-             
-            if (lmason) zlt(i,j,k) = (1. / zlt(i,j,k) ** nmason + 1. / ( fkar * (zf(k) + z0m(i,j)))**nmason) ** (-1./nmason)
-            if (lanisotrop) zlt(i,j,k) = dzf(k)
+                 ekm(i,j,k) = cm * zlt(i,j,k) * e120(i,j,k)
+                 ekh(i,j,k) = (ch1 + ch2 * zlt(i,j,k)*deltai(k)) * ekm(i,j,k)
 
-            ekm(i,j,k) = cm * zlt(i,j,k) * e120(i,j,k)
-            ekh(i,j,k) = (ch1 + ch2 * zlt(i,j,k)*deltai(k)) * ekm(i,j,k)
-
-            ekm(i,j,k) = max(ekm(i,j,k),ekmin)
-            ekh(i,j,k) = max(ekh(i,j,k),ekmin)
-          endif
+                 ekm(i,j,k) = max(ekm(i,j,k),ekmin)
+                 ekh(i,j,k) = max(ekh(i,j,k),ekmin)
+              end do
+           end do
         end do
-      end do
-    end do
+     else ! original TKE scheme, flexible but doesn't vectorize due to ifs
+        do k=1,kmax
+           do j=2,j1
+              do i=2,i1
+                 zlt(i,j,k) = delta(k)
+                 if (ldelta .or. (dthvdz(i,j,k)<=0)) then
+                    if (lmason) zlt(i,j,k) = (1. / zlt(i,j,k) ** nmason + 1. / ( fkar * (zf(k) + z0m(i,j)))**nmason) ** (-1./nmason)
+                    if (lanisotrop) zlt(i,j,k) = dzf(k)
+                    ekm(i,j,k) = cm * zlt(i,j,k) * e120(i,j,k)
+                    ekh(i,j,k) = (ch1 + ch2) * ekm(i,j,k)
+
+                    ekm(i,j,k) = max(ekm(i,j,k),ekmin)
+                    ekh(i,j,k) = max(ekh(i,j,k),ekmin)
+                 else
+                    ! zlt(i,j,k) = min(delta(k),cn*e120(i,j,k)/sqrt(grav/thvf(k)*abs(dthvdz(i,j,k))))
+                    ! faster calculation: evaluate sqrt only if the second argument is actually smaller
+                    if ( grav*abs(dthvdz(i,j,k)) * delta(k)**2 > (cn*e120(i,j,k))**2 * thvf(k) ) then
+                       zlt(i,j,k) = cn*e120(i,j,k)/sqrt(grav/thvf(k)*abs(dthvdz(i,j,k)))
+                    end if
+
+                    if (lmason) zlt(i,j,k) = (1. / zlt(i,j,k) ** nmason + 1. / ( fkar * (zf(k) + z0m(i,j)))**nmason) ** (-1./nmason)
+                    if (lanisotrop) zlt(i,j,k) = dzf(k)
+
+                    ekm(i,j,k) = cm * zlt(i,j,k) * e120(i,j,k)
+                    ekh(i,j,k) = (ch1 + ch2 * zlt(i,j,k)*deltai(k)) * ekm(i,j,k)
+
+                    ekm(i,j,k) = max(ekm(i,j,k),ekmin)
+                    ekh(i,j,k) = max(ekh(i,j,k),ekmin)
+                 endif
+              end do
+           end do
+        end do
+     end if
   end if
+
 
 !*************************************************************
 !     Set cyclic boundary condition for K-closure factors.
 !*************************************************************
-
-  call excjs( ekm           , 2,i1,2,j1,1,k1,ih,jh)
-  call excjs( ekh           , 2,i1,2,j1,1,k1,ih,jh)
+  ! with the TKE scheme, ekh, ekm are calculated over the ghost cells from e120
+  ! so no need to exchange here
+  if(lsmagorinsky) then
+     call excjs( ekm           , 2,i1,2,j1,1,k1,ih,jh)
+     call excjs( ekh           , 2,i1,2,j1,1,k1,ih,jh)
+  endif
 
   do j=1,j2
     do i=1,i2
@@ -439,7 +464,7 @@ contains
     e12p(i,j,k) = e12p(i,j,k) &
                 + (ekm(i,j,k)*tdef2 - ekh(i,j,k)*grav/thvf(k)*dthvdz(i,j,k) ) / (2*e120(i,j,k)) &  !  sbshr and sbbuo
                 - (ce1 + ce2*zlt(i,j,k)*deltai(k)) * e120(i,j,k)**2 /(2.*zlt(i,j,k))               !  sbdiss
-    
+
   end do
   end do
   end do
@@ -465,8 +490,8 @@ contains
           + ((w0(i,j,2)-w0(i,j,1))/dzf(1))**2   )
 
     if (sgs_surface_fix) then
-          ! Use known surface flux and exchange coefficient to derive 
-          ! consistent gradient (such that correct flux will occur in 
+          ! Use known surface flux and exchange coefficient to derive
+          ! consistent gradient (such that correct flux will occur in
           ! shear production term)
           ! Make sure that no division by zero occurs in determination of the
           ! directional component; ekm should already be >= ekmin
@@ -489,8 +514,8 @@ contains
                                  (v0(i+1,jp,1)-v0(i,jp,1))*dxi)**2   )
 
     if (sgs_surface_fix) then
-          ! Use known surface flux and exchange coefficient to derive 
-          ! consistent gradient (such that correct flux will occur in 
+          ! Use known surface flux and exchange coefficient to derive
+          ! consistent gradient (such that correct flux will occur in
           ! shear production term)
           ! Make sure that no division by zero occurs in determination of the
           ! directional component; ekm should already be >= ekmin
@@ -522,7 +547,7 @@ contains
   end do
 
   e12p(2:i1,2:j1,1) = e12p(2:i1,2:j1,1) + &
-            sbshr(2:i1,2:j1,1)+sbbuo(2:i1,2:j1,1)+sbdiss(2:i1,2:j1,1)  
+            sbshr(2:i1,2:j1,1)+sbbuo(2:i1,2:j1,1)+sbdiss(2:i1,2:j1,1)
 
   return
   end subroutine sources
@@ -533,8 +558,8 @@ contains
     use modfields, only : rhobf,rhobh
     implicit none
 
-    real, intent(in)    :: putin(2-ih:i1+ih,2-jh:j1+jh,k1)
-    real, intent(inout) :: putout(2-ih:i1+ih,2-jh:j1+jh,k1)
+    real(field_r), intent(in)    :: putin(2-ih:i1+ih,2-jh:j1+jh,k1)
+    real(field_r), intent(inout) :: putout(2-ih:i1+ih,2-jh:j1+jh,k1)
     real, intent(in)    :: flux (i2,j2)
 
     integer i,j,k,jm,jp,km,kp
@@ -596,7 +621,7 @@ contains
     use modfields, only : e120,rhobf,rhobh
     implicit none
 
-    real, intent(inout) :: putout(2-ih:i1+ih,2-jh:j1+jh,k1)
+    real(field_r), intent(inout) :: putout(2-ih:i1+ih,2-jh:j1+jh,k1)
     integer             :: i,j,k,jm,jp,km,kp
 
     do k=2,kmax
@@ -657,7 +682,7 @@ contains
     use modsurfdata,only : ustar
     implicit none
 
-    real, intent(inout) :: putout(2-ih:i1+ih,2-jh:j1+jh,k1)
+    real(field_r), intent(inout) :: putout(2-ih:i1+ih,2-jh:j1+jh,k1)
     real                :: emmo,emom,emop,empo
     real                :: fu
     real                :: ucu, upcu
@@ -769,7 +794,7 @@ contains
 
     implicit none
 
-    real, intent(inout) :: putout(2-ih:i1+ih,2-jh:j1+jh,k1)
+    real(field_r), intent(inout) :: putout(2-ih:i1+ih,2-jh:j1+jh,k1)
     real                :: emmo, eomm,eomp,epmo
     real                :: fv, vcv,vpcv
     integer             :: i,j,k,jm,jp,km,kp
@@ -878,7 +903,7 @@ contains
 
   !*****************************************************************
 
-    real, intent(inout) :: putout(2-ih:i1+ih,2-jh:j1+jh,k1)
+    real(field_r), intent(inout) :: putout(2-ih:i1+ih,2-jh:j1+jh,k1)
     real                :: emom, eomm, eopm, epom
     integer             :: i,j,k,jm,jp,km,kp
 

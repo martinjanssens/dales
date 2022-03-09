@@ -45,6 +45,7 @@ module modbulkmicro
 !
 !   bulkmicro is called from *modmicrophysics*
 !*********************************************************************
+  use modprecision, only : field_r
   implicit none
   private
   public initbulkmicro, exitbulkmicro, bulkmicro
@@ -109,8 +110,8 @@ module modbulkmicro
     use modglobal, only : i1,j1,k1
     use modfields, only : rhof
     implicit none
-    real, intent(in)    :: Nr  (2:i1, 2:j1, 1:k1) &
-                          ,qr  (2:i1, 2:j1, 1:k1)
+    real(field_r), intent(in)    :: Nr  (2:i1, 2:j1, 1:k1), &
+                                    qr  (2:i1, 2:j1, 1:k1)
     integer :: i,j,k
 
     if (l_sb) then
@@ -137,7 +138,7 @@ module modbulkmicro
           do j=2,j1
             do i=2,i1
               if (qrmask(i,j,k)) then
-                lbdr = ((mur_cst+3.)*(mur_cst+2.)*(mur_cst+1.))**(1./3.)/Dvr
+                lbdr(i,j,k) = ((mur_cst+3.)*(mur_cst+2.)*(mur_cst+1.))**(1./3.)/Dvr(i,j,k)
               !else
               !  lbdr = 0.
               endif
@@ -215,13 +216,13 @@ module modbulkmicro
     ! remove neg. values of Nr and qr
     !*********************************************************************
     if (l_rain) then
-       if (sum(qr, qr<0.) > 0.000001*sum(qr)) then
-         write(*,*)'amount of neg. qr and Nr thrown away is too high  ',timee,' sec'
-       end if
-       if (sum(Nr, Nr<0.) > 0.000001*sum(Nr)) then
-          write(*,*)'amount of neg. qr and Nr thrown away is too high  ',timee,' sec'
-       end if
-
+       !if (-sum(qr, qr<0.) > 0.000001*sum(qr)) then
+       !  write(*,*)'amount of neg. qr and Nr thrown away is too high  ',timee,' sec'
+       !end if
+       !if (-sum(Nr, Nr<0.) > 0.000001*sum(Nr)) then
+       !   write(*,*)'amount of neg. qr and Nr thrown away is too high  ',timee,' sec'
+       !end if
+              
        Nr = max(0.,Nr)
        qr = max(0.,qr)
 
@@ -577,9 +578,12 @@ module modbulkmicro
     real :: wfall_Nr      !<  fall velocity for Nr
     real :: sed_qr
     real :: sed_Nr
-    real, allocatable     :: qr_spl(:,:,:), Nr_spl(:,:,:)
+    real(field_r), allocatable     :: qr_spl(:,:,:), Nr_spl(:,:,:)
 
     real,save :: dt_spl,wfallmax
+
+    precep = 0 ! zero the precipitation flux field
+               ! the update below is not always performed
 
     if (qrbase.gt.qrroof) return
 
@@ -616,6 +620,7 @@ module modbulkmicro
             if (qrmask(i,j,k)) then
               ! correction for width of DSD
               Dgr = (exp(4.5*(log(sig_gr))**2))**(-1./3.)*Dvr(i,j,k)
+              sed_qr = 1.*sed_flux(Nr_spl(i,j,k),Dgr,log(sig_gr)**2,D_s,3)
               sed_Nr = 1./pirhow*sed_flux(Nr_spl(i,j,k),Dgr,log(sig_gr)**2,D_s,0)
 
               ! correction for the fact that pwcont .ne. qr_spl
@@ -625,8 +630,6 @@ module modbulkmicro
                 sed_qr = (qr_spl(i,j,k)*rhof(k)/pwcont)*sed_qr
                 ! or:
                 ! qr_spl*(sed_qr/pwcont) = qr_spl*fallvel.
-              else
-                sed_qr = 1.*sed_flux(Nr_spl(i,j,k),Dgr,log(sig_gr)**2,D_s,3)
               endif
 
               qr_spl(i,j,k) = qr_spl(i,j,k) - sed_qr*dt_spl/(dzf(k)*rhof(k))
@@ -724,8 +727,8 @@ module modbulkmicro
   ! Cond. (S>0.) neglected (all water is condensed on cloud droplets)
   !*********************************************************************
 
-    use modglobal, only : i1,j1,Rv,rlv,cp,pi,mygamma251,mygamma21,lacz_gamma
-    use modfields, only : exnf,qt0,svm,qvsl,tmp0,ql0,esl,rhof
+    use modglobal, only : i1,j1,rd,Rv,rlv,cp,pi,mygamma251,mygamma21,lacz_gamma
+    use modfields, only : exnf,qt0,svm,thl0,ql0,rhof,presf
     use modmicrodata, only : Nr, mur, Dv, &
                              inr, iqr, Kt, &
                              l_sb, &
@@ -743,6 +746,7 @@ module modbulkmicro
     real :: G !< cond/evap rate of a drop
 
     real :: evap, Nevap
+    real :: qvsl, tmp, esl1, TC
 
     if (qrbase.gt.qrroof) return
 
@@ -752,6 +756,11 @@ module modbulkmicro
        do j=2,j1
        do i=2,i1
          if (qrmask(i,j,k)) then
+           tmp = exnf(k)*thl0(i,j,k)  + (rlv/cp) * ql0(i,j,k)
+           TC = tmp - 273.15 ! in Celcius
+           esl1 = 610.94 * exp( (17.625*TC) / (TC+243.04) ) ! Magnus
+           qvsl = (rd/rv) * esl1 / (presf(k) - (1.-rd/rv)*esl1)
+
            numel=nint(mur(i,j,k)*100.)
            F = avf * mygamma21(numel)*Dvr(i,j,k) +  &
               bvf*Sc_num**(1./3.)*(a_tvsb/nu_a)**0.5*mygamma251(numel)*Dvr(i,j,k)**(3./2.) * &
@@ -759,8 +768,8 @@ module modbulkmicro
                  -(1./8.)  *(b_tvsb/a_tvsb)**2.*(lbdr(i,j,k)/(2.*c_tvsb+lbdr(i,j,k)))**(mur(i,j,k)+2.5)  &
                  -(1./16.) *(b_tvsb/a_tvsb)**3.*(lbdr(i,j,k)/(3.*c_tvsb+lbdr(i,j,k)))**(mur(i,j,k)+2.5) &
                  -(5./128.)*(b_tvsb/a_tvsb)**4.*(lbdr(i,j,k)/(4.*c_tvsb+lbdr(i,j,k)))**(mur(i,j,k)+2.5)  )
-           S = min(0.,(qt0(i,j,k)-ql0(i,j,k))/qvsl(i,j,k)- 1.)
-           G = (Rv * tmp0(i,j,k)) / (Dv*esl(i,j,k)) + rlv/(Kt*tmp0(i,j,k))*(rlv/(Rv*tmp0(i,j,k)) -1.)
+           S = min(0.,(qt0(i,j,k)-ql0(i,j,k))/qvsl- 1.)
+           G = (Rv * tmp) / (Dv*esl1) + rlv/(Kt*tmp)*(rlv/(Rv*tmp) -1.)
            G = 1./G
 
            evap = 2*pi*Nr(i,j,k)*G*F*S/rhof(k)
@@ -785,8 +794,13 @@ module modbulkmicro
        do j=2,j1
        do i=2,i1
          if (qrmask(i,j,k)) then
-           S = min(0.,(qt0(i,j,k)-ql0(i,j,k))/qvsl(i,j,k)- 1.)
-           G = (Rv * tmp0(i,j,k)) / (Dv*esl(i,j,k)) + rlv/(Kt*tmp0(i,j,k))*(rlv/(Rv*tmp0(i,j,k)) -1.)
+           tmp = exnf(k)*thl0(i,j,k)  + (rlv/cp) * ql0(i,j,k)
+           TC = tmp - 273.15 ! in Celcius
+           esl1 = 610.94 * exp( (17.625*TC) / (TC+243.04) ) ! Magnus
+           qvsl = (rd/rv) * esl1 / (presf(k) - (1.-rd/rv)*esl1)
+
+           S = min(0.,(qt0(i,j,k)-ql0(i,j,k))/qvsl- 1.)
+           G = (Rv * tmp) / (Dv*esl1) + rlv/(Kt*tmp)*(rlv/(Rv*tmp) -1.)
            G = 1./G
 
            evap = c_evapkk*2*pi*Dvr(i,j,k)*G*S*Nr(i,j,k)/rhof(k)
@@ -828,7 +842,8 @@ module modbulkmicro
     use modglobal, only : pi,rhow
     implicit none
 
-    real, intent(in) :: Nin, Din, sig2, Ddiv
+    real(field_r), intent(in) :: Nin
+    real         , intent(in) :: Din, sig2, Ddiv
     integer, intent(in) :: nnn
     !para. def. lognormal DSD (sig2 = ln^2 sigma_g), D sep. droplets from drops
     !,power of of D in integral
@@ -890,7 +905,8 @@ module modbulkmicro
     use modglobal, only : pi,rhow
     implicit none
 
-    real, intent(in) :: Nin, Din, sig2, Ddiv
+    real(field_r), intent(in) :: Nin
+    real         , intent(in) :: Din, sig2, Ddiv
     integer, intent(in) :: nnn
     !para. def. lognormal DSD (sig2 = ln^2 sigma_g), D sep. droplets from drops
     !,power of of D in integral
