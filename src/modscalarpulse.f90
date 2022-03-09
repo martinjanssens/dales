@@ -38,8 +38,7 @@ contains
 
   subroutine initscalarpulse
     use mpi
-    use modmpi,    only :myid,my_real,mpi_logical,mpi_long_long, &
-                         mpierr,comm3d
+    use modmpi,    only :myid,mpierr,comm3d,D_MPI_BCAST
     use modglobal, only :cexpnr,runtime,ifnamopt,fname_options, &
                          checknamelisterror,tres
 
@@ -59,12 +58,12 @@ contains
 
     timepulse = timepulse/tres
 
-    call MPI_BCAST(lscalarpulse ,1,MPI_LOGICAL   ,0,comm3d,mpierr)
-    call MPI_BCAST(timepulse    ,1,MPI_LONG_LONG ,0,comm3d,mpierr)
-    call MPI_BCAST(amppulse     ,1,MY_REAL       ,0,comm3d,mpierr)
-    call MPI_BCAST(kpulse       ,1,MY_REAL       ,0,comm3d,mpierr)
-    call MPI_BCAST(zminpulse    ,1,MY_REAL       ,0,comm3d,mpierr)
-    call MPI_BCAST(zmaxpulse    ,1,MY_REAL       ,0,comm3d,mpierr)
+    call D_MPI_BCAST(lscalarpulse ,1,0,comm3d,mpierr)
+    call D_MPI_BCAST(timepulse    ,1,0,comm3d,mpierr)
+    call D_MPI_BCAST(amppulse     ,1,0,comm3d,mpierr)
+    call D_MPI_BCAST(kpulse       ,1,0,comm3d,mpierr)
+    call D_MPI_BCAST(zminpulse    ,1,0,comm3d,mpierr)
+    call D_MPI_BCAST(zmaxpulse    ,1,0,comm3d,mpierr)
 
   end subroutine initscalarpulse
 

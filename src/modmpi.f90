@@ -86,6 +86,7 @@ save
     procedure :: D_MPI_BCAST_REAL64_S
     procedure :: D_MPI_BCAST_REAL32_S
     procedure :: D_MPI_BCAST_INT32_S
+    procedure :: D_MPI_BCAST_INT64_S
     procedure :: D_MPI_BCAST_REAL32_R1
     procedure :: D_MPI_BCAST_REAL32_R2
     procedure :: D_MPI_BCAST_REAL64_R1
