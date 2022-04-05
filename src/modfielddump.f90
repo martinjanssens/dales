@@ -34,7 +34,7 @@ private
 PUBLIC :: initfielddump, fielddump,exitfielddump
 save
 !NetCDF variables
-  integer :: nvar = 9
+  integer :: nvar = 11
   integer :: ncid,nrec = 0
   character(80) :: fname = 'fielddump.xxx.xxx.xxx.nc'
   character(80),dimension(:,:), allocatable :: ncname
@@ -79,7 +79,7 @@ contains
 
     namelist/NAMFIELDDUMP/ &
     dtav,lfielddump,ldiracc,lbinary,klow,khigh,ncoarse, tmin, tmax,&
-         lu, lv, lw, lqt, lql, lthl, lbuoy, lsv, lclassic
+         lu, lv, lw, lqt, lql, lthl, lbuoy, le12, lp, lqtpmcr, lthlprad, lsv, lclassic
 
     dtav=dtav_glob
     klow=1
@@ -418,7 +418,7 @@ subroutine fielddump
     endif
 
     ! microphysics
-    if (lnetcdf .and. lqtpmcr .and. imicro/=imicro_none) vars(:,:,:,ind_qtpmcr) = qtpmcr(2:i1:ncoarse,2:j1:ncoarse,klow:khigh)
+    if (lnetcdf .and. lqtpmcr) vars(:,:,:,ind_qtpmcr) = qtpmcr(2:i1:ncoarse,2:j1:ncoarse,klow:khigh)
     if (lbinary .and. imicro/=imicro_none) then
       field = NINT(1.0E7*qtpmcr,2)
       if (ldiracc) then
