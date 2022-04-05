@@ -60,6 +60,9 @@
 !    2   "grass     "  0.035  0.035   300.0  1.0e5   0.25     50.0   0.1    0.30   0.1e-3          1.0          0.0          0.0       0.0005
 
 
+! For SST heterogeneities, you can set the switch lhetero_sfc_temp, and specify an input thls fluctuation field around the specified thls.
+! The specified field (ssfc_thl.inp.xxx) *must* be a 2D matrix with itot rows and jtot columns
+
 module modsurface
   use modsurfdata
   implicit none
@@ -74,11 +77,11 @@ contains
     use modglobal,  only : i1, j1, i2, j2, itot, jtot, nsv, ifnamopt, fname_options, ifinput, cexpnr, checknamelisterror
     use modraddata, only : iradiation,rad_shortw,irad_par,irad_user,irad_rrtmg
     use modmpi,     only : myid, comm3d, mpierr, mpi_logical, mpi_integer, D_MPI_BCAST
-
     implicit none
 
     integer   :: i,j,k, landindex, ierr, defined_landtypes, landtype_0 = -1
     integer   :: tempx,tempy
+    real      :: exner
  character(len=1500) :: readbuffer
     namelist/NAMSURFACE/ & !< Soil related variables
       isurf,tsoilav, tsoildeepav, phiwav, rootfav, &
@@ -88,6 +91,8 @@ contains
       rsminav, rssoilminav, LAIav, gDav, &
       ! Prescribed values for isurf 2, 3, 4
       z0, thls, ps, ustin, wtsurf, wqsurf, wsvsurf, &
+      ! Heterogeneous surface temperature only
+      lhetero_sfc_temp, &
       ! Heterogeneous variables
       lhetero, xpatches, ypatches, land_use, loldtable, &
       ! AGS variables
@@ -145,6 +150,8 @@ contains
     call D_MPI_BCAST(wsvsurf(1:nsv),nsv,0,comm3d,mpierr)
     call D_MPI_BCAST(ps         ,1,0,comm3d,mpierr)
     call D_MPI_BCAST(thls       ,1,0,comm3d,mpierr)
+
+    call D_MPI_BCAST(lhetero_sfc_temp           ,            1  ,0, comm3d, mpierr)
 
     call D_MPI_BCAST(lhetero                    ,            1,  0, comm3d, mpierr)
     call D_MPI_BCAST(loldtable                  ,            1,  0, comm3d, mpierr)
@@ -209,6 +216,40 @@ contains
           if(myid==0) print *,"WARNING::: planttype should be either 3 or 4, corresponding to C3 or C4 plants. It now defaulted to 3."
           planttype = 3
       end select
+    endif
+
+    if(lhetero_sfc_temp) then
+       allocate(dthl_sfc_domain(itot,jtot))
+       allocate(thls_hetero(i1,j1))
+       allocate(dthls_hetero(i1,j1))
+       !cstep allocate(tempsfc_hetero(i1,j1))
+
+       if  (myid==0) then
+
+          write(6,*) 'Reading heterogeneous surface potential temperature'
+          open (ifinput,file='sfc_thl.inp.'//cexpnr)
+
+          do i=1,itot
+            read(ifinput, *) (dthl_sfc_domain(i,j), j=1, jtot)
+          end do
+          close(ifinput)
+       endif
+
+       call D_MPI_BCAST(dthl_sfc_domain(1:itot,1:jtot),itot*jtot, ,0,comm3d,mpierr)
+
+       exner      = (ps / pref0)**(rd/cp)
+       do i=2,i1
+       do j=2,j1
+        ! tempsfc_hetero (i,j) = dthl_sfc_domain(i-1+myidx*imax,j-1+myidy*jmax) !maps global to local domains
+        ! thls_hetero    (i,j) = tempsfc_hetero(i,j) / exner
+         !thls_hetero    (i,j) = dthl_sfc_domain(i-1+myidx*imax,j-1+myidy*jmax) / exner  !maps global to local domains
+        dthls_hetero    (i,j) = dthl_sfc_domain(i-1+myidx*imax,j-1+myidy*jmax)
+        thls_hetero    (i,j) = thls + dthls_hetero    (i,j)  !dthl_sfc_domain(i-1+myidx*imax,j-1+myidy*jmax)
+       end do
+       end do
+
+       deallocate(dthl_sfc_domain)
+
     endif
 
     if(lhetero) then
@@ -809,8 +850,12 @@ contains
           if(lhetero) then
             tskin(i,j) = thls_patch(patchxnr(i),patchynr(j))
           else
-            tskin(i,j) = thls
-          endif
+            if(lhetero_sfc_temp) then
+               thls_hetero    (i,j) = thls + dthls_hetero    (i,j)
+               tskin(i,j) = thls_hetero (i,j) !this is the potential temperature 
+            else
+               tskin(i,j) = thls
+            endif
         end do
       end do
 
@@ -1485,6 +1530,10 @@ contains
 
   subroutine exitsurface
     implicit none
+    if (lhetero_sfc_temp) then
+        !deallocate(thls_hetero,tempsfc_hetero) 
+        deallocate(dthls_hetero,thls_hetero)
+    endif
     return
   end subroutine exitsurface
 
