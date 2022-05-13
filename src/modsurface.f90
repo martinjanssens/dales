@@ -74,9 +74,10 @@ contains
 !> Reads the namelists and initialises the soil.
   subroutine initsurface
 
-    use modglobal,  only : i1, j1, i2, j2, itot, jtot, nsv, ifnamopt, fname_options, ifinput, cexpnr, checknamelisterror
+    use modglobal,  only : i1, j1, i2, j2, itot, jtot, nsv, ifnamopt, fname_options, ifinput, cexpnr, checknamelisterror, &
+                           pref0,cp,rd,imax,jmax
     use modraddata, only : iradiation,rad_shortw,irad_par,irad_user,irad_rrtmg
-    use modmpi,     only : myid, comm3d, mpierr, mpi_logical, mpi_integer, D_MPI_BCAST
+    use modmpi,     only : myid, comm3d, mpierr, mpi_logical, mpi_integer, D_MPI_BCAST, myidx, myidy
     implicit none
 
     integer   :: i,j,k, landindex, ierr, defined_landtypes, landtype_0 = -1
@@ -235,7 +236,7 @@ contains
           close(ifinput)
        endif
 
-       call D_MPI_BCAST(dthl_sfc_domain(1:itot,1:jtot),itot*jtot, ,0,comm3d,mpierr)
+       call D_MPI_BCAST(dthl_sfc_domain(1:itot,1:jtot),itot*jtot ,0,comm3d,mpierr)
 
        exner      = (ps / pref0)**(rd/cp)
        do i=2,i1
@@ -856,6 +857,7 @@ contains
             else
                tskin(i,j) = thls
             endif
+          endif
         end do
       end do
 

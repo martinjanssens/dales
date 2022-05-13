@@ -115,7 +115,9 @@ contains
     call D_MPI_BCAST(le12        ,1,0,comm3d,ierr)
     call D_MPI_BCAST(lp          ,1,0,comm3d,ierr)
     call D_MPI_BCAST(lsv       ,100,0,comm3d,ierr)
-
+    call D_MPI_BCAST(lthlprad    ,1,0,comm3d,ierr)
+    call D_MPI_BCAST(lqtpmcr     ,1,0,comm3d,ierr)
+    
     if (ncoarse==-1) then
       ncoarse = 1
     end if
