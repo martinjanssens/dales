@@ -34,7 +34,7 @@ private
 PUBLIC :: initfielddump, fielddump,exitfielddump
 save
 !NetCDF variables
-  integer :: nvar = 7
+  integer :: nvar = 11
   integer :: ncid,nrec = 0
   character(80) :: fname = 'fielddump.xxx.xxx.xxx.nc'
   character(80),dimension(:,:), allocatable :: ncname
@@ -53,16 +53,22 @@ save
   logical :: lql = .true.        !< switch for saving the ql field
   logical :: lthl = .true.       !< switch for saving the thl field
   logical :: lbuoy = .true.      !< switch for saving the buoy field
+  logical :: le12 = .true.       !< switch for saving the e12 field
+  logical :: lp = .true.         !< switch for saving the p field
+  logical :: lqtpmcr = .true.    !< switch for saving the qtpmcr field
+  logical :: lthlprad = .true.   !< switch for saving the thlprad field
   logical :: lsv(100) = .true.   !< switches for saving the sv fields
 
   ! indices for the variables in the netCDF vars array
-  integer :: ind, ind_u=-1, ind_v=-1, ind_w=-1, ind_qt=-1, ind_ql=-1, ind_thl=-1, ind_buoy=-1, ind_sv(100)=-1
+  integer :: ind, ind_u=-1, ind_v=-1, ind_w=-1, ind_qt=-1, ind_ql=-1, ind_thl=-1, &
+             ind_buoy=-1, ind_e12=-1, ind_p=-1, ind_qtpmcr=-1, ind_thlprad=-1, ind_sv(100)=-1
 contains
 !> Initializing fielddump. Read out the namelist, initializing the variables
   subroutine initfielddump
     use modmpi,   only :myid,comm3d,mpi_logical,mpi_integer,myidx,myidy &
                        , D_MPI_BCAST
-    use modglobal,only :imax,jmax,kmax,cexpnr,ifnamopt,fname_options,dtmax,dtav_glob,kmax, ladaptive,dt_lim,btime,tres,checknamelisterror
+    use modglobal,only :imax,jmax,kmax,cexpnr,ifnamopt,fname_options,dtmax,dtav_glob,kmax, ladaptive,dt_lim,btime,tres,&
+                        checknamelisterror
     use modstat_nc,only : lnetcdf,open_nc, define_nc,ncinfo,nctiminfo,writestat_dims_nc
     implicit none
     integer :: ierr, n
@@ -70,7 +76,7 @@ contains
 
     namelist/NAMFIELDDUMP/ &
          dtav,lfielddump,ldiracc,lbinary,klow,khigh,ncoarse, tmin, tmax,&
-         lu, lv, lw, lqt, lql, lthl, lbuoy, lsv
+         lu, lv, lw, lqt, lql, lthl, lbuoy, le12, lp, lqtpmcr, lthlprad, lsv
 
     dtav=dtav_glob
     klow=1
@@ -100,7 +106,12 @@ contains
     call D_MPI_BCAST(lql         ,1,0,comm3d,ierr)
     call D_MPI_BCAST(lthl        ,1,0,comm3d,ierr)
     call D_MPI_BCAST(lbuoy       ,1,0,comm3d,ierr)
+    call D_MPI_BCAST(le12        ,1,0,comm3d,ierr)
+    call D_MPI_BCAST(lp          ,1,0,comm3d,ierr)
     call D_MPI_BCAST(lsv       ,100,0,comm3d,ierr)
+
+    call D_MPI_BCAST(lthlprad    ,1,0,comm3d,ierr)
+    call D_MPI_BCAST(lqtpmcr     ,1,0,comm3d,ierr)
 
     if (ncoarse==-1) then
       ncoarse = 1
@@ -117,10 +128,10 @@ contains
       stop 'dtav should be a integer multiple of dtmax'
     end if
 
+    nvar = nvar + nsv
     if (lnetcdf) then
       write(fname,'(A,i3.3,A,i3.3,A)') 'fielddump.', myidx, '.', myidy, '.xxx.nc'
       fname(19:21) = cexpnr
-      nvar = 7+nsv ! maximum number of variables
       allocate(ncname(nvar,4))
       call nctiminfo(tncname(1,:))
       ind = 1
@@ -159,7 +170,26 @@ contains
          ind = ind + 1
          call ncinfo(ncname(ind_buoy,:),'buoy','Buoyancy','K','tttt')
       end if
-
+      if (le12) then
+         ind_e12 = ind
+         ind = ind + 1
+         call ncinfo(ncname(ind_e12,:),'e12','Square root of SFS TKE','m/s','tttt')
+      end if
+      if (lp) then
+         ind_p = ind
+         ind = ind + 1
+         call ncinfo(ncname(ind_p,:),'p','Normalised pressure fluctuation','m^2/s^2','tttt')
+      end if
+      if (lqtpmcr) then
+         ind_qtpmcr = ind
+         ind = ind + 1
+         call ncinfo(ncname(ind_qtpmcr,:),'qtpmcr','Total specific humidity microphysics tendency','kg/kg/s','tttt')
+      end if
+      if (lthlprad) then
+         ind_thlprad = ind
+         ind = ind + 1
+         call ncinfo(ncname(ind_thlprad,:),'thlprad','Radiative heating rate contribution to liquid-water potential temperature','K/s','tttt')
+      end if
       do n=1,nsv
         if (lsv(n)) then
            ind_sv(n) = ind
@@ -178,7 +208,7 @@ contains
      call define_nc( ncid, NVar, ncname(1:NVar,:))
      ! must slice ncname here because define_nc expects first dimension to be NVar
      ! and NVar may have decreased if some fields are not saved
-    end if
+   end if
 
   end subroutine initfielddump
 
@@ -186,13 +216,16 @@ contains
 !> if lbinary, collect data to truncated (2 byte) integers, and write them to file
 !> if lnetcdf, write to netCDF (as float32).
   subroutine fielddump
-    use modfields, only : u0,v0,w0,thl0,qt0,ql0,sv0,thv0h,thvh
+    use modfields, only : u0,v0,w0,thl0,qt0,ql0,sv0,thv0h,thvh,e120,rhobf
     use modsurfdata,only : thls,qts,thvs
     use modglobal, only : imax,i1,ih,jmax,j1,jh,k1,rk3step,&
                           timee,dt_lim,cexpnr,ifoutput,rtimee
+    use modpois, only : p
     use modmpi,    only : myid,cmyidx, cmyidy
     use modstat_nc, only : lnetcdf, writestat_nc
-    use modmicrodata, only : iqr, imicro, imicro_none
+    use modmicrodata, only : iqr, imicro, imicro_none, qrmin, qtpmcr
+    use modraddata, only : thlprad
+
     implicit none
 
     integer(KIND=selected_int_kind(4)), allocatable :: field(:,:,:)
@@ -200,7 +233,7 @@ contains
     integer i,j,k,n
     integer :: writecounter = 1
     integer :: reclength
-
+    real :: twothree = 2./3
 
     if (.not. lfielddump) return
     if (rk3step/=3) return
@@ -351,11 +384,91 @@ contains
       close (ifoutput)
     endif
 
+    ! e12
+    if (lnetcdf .and. le12) vars(:,:,:,ind_e12) = e120(2:i1:ncoarse,2:j1:ncoarse,klow:khigh)
+    if (lbinary) then
+      field = NINT(1.0E3*e120,2)
+      if (ldiracc) then
+        open (ifoutput,file='wbe120.'//cmyidx//'.'//cmyidy//'.'//cexpnr,access='direct', form='unformatted', recl=reclength)
+        write (ifoutput, rec=writecounter) field(2:i1:ncoarse,2:j1:ncoarse,klow:khigh)
+      else
+        open  (ifoutput,file='wbe120.'//cmyidx//'.'//cmyidy//'.'//cexpnr,form='unformatted',position='append')
+        write (ifoutput) (((field(i,j,k),i=2,i1, ncoarse),j=2,j1, ncoarse),k=klow,khigh)
+      end if
+      close (ifoutput)
+    endif
+    
+    ! pressure
+    if (lnetcdf .and. lp) vars(:,:,:,ind_p) = p(2:i1:ncoarse,2:j1:ncoarse,klow:khigh) - twothree*e120(2:i1:ncoarse,2:j1:ncoarse,klow:khigh)*e120(2:i1:ncoarse,2:j1:ncoarse,klow:khigh)
+    
+    if (lbinary) then
+      do i=2-ih,i1+ih, ncoarse
+      do j=2-jh,j1+jh, ncoarse
+      do k=2,k1
+        field(i,j,k) = NINT(1.0E2*(p(i,j,k) - twothree*e120(i,j,k))*e120(i,j,k))
+      enddo
+      enddo
+      enddo
+
+      if (ldiracc) then
+        open (ifoutput,file='wbp.'//cmyidx//'.'//cmyidy//'.'//cexpnr,access='direct', form='unformatted', recl=reclength)
+        write (ifoutput, rec=writecounter) field(2:i1:ncoarse,2:j1:ncoarse,klow:khigh)
+      else
+        open  (ifoutput,file='wbp.'//cmyidx//'.'//cmyidy//'.'//cexpnr,form='unformatted',position='append')
+        write (ifoutput) (((field(i,j,k),i=2,i1, ncoarse),j=2,j1, ncoarse),k=klow,khigh)
+      end if
+      close (ifoutput)
+    endif
+
+    ! microphysics
+    if (lnetcdf .and. lqtpmcr) vars(:,:,:,ind_qtpmcr) = qtpmcr(2:i1:ncoarse,2:j1:ncoarse,klow:khigh)
+    if (lbinary .and. imicro/=imicro_none) then
+      field = NINT(1.0E7*qtpmcr,2)
+      if (ldiracc) then
+        open (ifoutput,file='wbqtpmcr.'//cmyidx//'.'//cmyidy//'.'//cexpnr,access='direct', form='unformatted', recl=reclength)
+        write (ifoutput, rec=writecounter) field(2:i1:ncoarse,2:j1:ncoarse,klow:khigh)
+      else
+        open  (ifoutput,file='wbqtpmcr.'//cmyidx//'.'//cmyidy//'.'//cexpnr,form='unformatted',position='append')
+        write (ifoutput) (((field(i,j,k),i=2,i1, ncoarse),j=2,j1, ncoarse),k=klow,khigh)
+      end if
+      close (ifoutput)
+    endif
+
+    ! radiation
+    if (lnetcdf .and. lthlprad) vars(:,:,:,ind_thlprad) = thlprad(2:i1:ncoarse,2:j1:ncoarse,klow:khigh)
+
+    if (lbinary) then
+      field = NINT(1.0E3*thlprad,2)
+      if (ldiracc) then
+        open (ifoutput,file='wbthlprad.'//cmyidx//'.'//cmyidy//'.'//cexpnr,access='direct', form='unformatted', recl=reclength)
+        write (ifoutput, rec=writecounter) field(2:i1:ncoarse,2:j1:ncoarse,klow:khigh)
+      else
+        open  (ifoutput,file='wbthlprad.'//cmyidx//'.'//cmyidy//'.'//cexpnr,form='unformatted',position='append')
+        write (ifoutput) (((field(i,j,k),i=2,i1, ncoarse),j=2,j1, ncoarse),k=klow,khigh)
+      end if
+      close (ifoutput)
+    endif
+
     ! scalar variables
     if (lnetcdf) then
        do n=1,nsv
           if (lsv(n)) then
              vars(:,:,:,ind_sv(n)) = sv0(2:i1:ncoarse,2:j1:ncoarse,klow:khigh,n)
+
+             if(imicro/=imicro_none .and. n == iqr) then
+                ! round small qr to 0 at output, for better compression
+                do k=1,khigh-klow
+                   do j=2,j1
+                      do i=2,i1
+                         if (abs(vars(i,j,k,ind_sv(n))) < qrmin) then
+                            vars(i,j,k,ind_sv(n)) = 0
+                         end if
+                      end do
+                   end do
+                end do
+             end if
+
+
           end if
        end do
     end if
