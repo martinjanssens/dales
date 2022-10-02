@@ -144,11 +144,11 @@ contains
 
   subroutine nudge
     use modglobal, only : timee,rtimee,i1,j1,kmax,rdt
-    use modfields, only : up,vp,wp,thlp, qtp,u0av,v0av,qt0av,thl0av
+    use modfields, only : up,vp,wp,thlp, qtp,u0av,v0av,qt0av,thl0av,&
                           u0,v0,w0,thl0, qt0
     implicit none
 
-    integer k,t
+    integer i,j,k,t
     real :: dtm,dtp,currtnudge
 
     if (.not.(lnudge)) return
@@ -166,7 +166,7 @@ contains
     dtm = ( rtimee-timenudge(t) ) / ( timenudge(t+1)-timenudge(t) )
     dtp = ( timenudge(t+1)-rtimee)/ ( timenudge(t+1)-timenudge(t) )
 
-    if lnudgelocal then
+    if (lnudgelocal) then
       do k=1,kmax
 ! Remove lines until comment if you want to keep this option
         currtnudge = max(rdt,tnudge(k,t)*dtp+tnudge(k,t+1)*dtm)
@@ -179,7 +179,7 @@ contains
         if(lthlnudge) thlp(2:i1,2:j1,k)=thlp(2:i1,2:j1,k)-&
             (thl0av(k)-(thlnudge(k,t)*dtp+thlnudge(k,t+1)*dtm))/currtnudge
         do j=2,j1
-          do j=2,i1
+          do i=2,i1
 ! This commented block is what it should look like. Now the option just defaults to
 ! the nudging test Martin wants to do (02/10/2022) - nudging moisture locally with
 ! a different nudging time than the other variables
