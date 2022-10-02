@@ -37,8 +37,8 @@ PUBLIC :: initnudge, nudge,exitnudge
 SAVE
   real, dimension(:,:), allocatable :: tnudge,unudge,vnudge,wnudge,thlnudge,qtnudge
   real, dimension(:)  , allocatable :: timenudge
-  real :: tnudgefac = 1.
-  logical :: lnudge = .false.,lunudge,lvnudge,lwnudge,lthlnudge,lqtnudge
+  real :: tnudgefac = 1.,tnudgeqt = 3600.
+  logical :: lnudge = .false.,lnudgelocal=.false.,lunudge,lvnudge,lwnudge,lthlnudge,lqtnudge
   integer :: ntnudge = 10000
 
 contains
@@ -51,7 +51,7 @@ contains
     real,allocatable,dimension(:) :: height
     character(1) :: chmess1
     namelist /NAMNUDGE/ &
-       lnudge,tnudgefac
+       lnudge,tnudgefac,lnudgelocal,tnudgeqt
     allocate(tnudge(k1,ntnudge),unudge(k1,ntnudge),vnudge(k1,ntnudge),wnudge(k1,ntnudge),thlnudge(k1,ntnudge),qtnudge(k1,ntnudge))
     allocate(timenudge(0:ntnudge), height(k1))
     tnudge = 0
@@ -70,7 +70,10 @@ contains
       write(6 ,NAMNUDGE)
       close(ifnamopt)
     end if
-    call D_MPI_BCAST(lnudge    , 1,0,comm3d,mpierr)
+    
+    call D_MPI_BCAST(lnudge     , 1,0,comm3d,mpierr)
+    call D_MPI_BCAST(lnudgelocal, 1,0,comm3d,mpierr)
+    call D_MPI_BCAST(tnudgeqt   , 1,0,comm3d,mpierr)
 
     if (.not. lnudge) return
     if(myid==0) then
@@ -142,6 +145,7 @@ contains
   subroutine nudge
     use modglobal, only : timee,rtimee,i1,j1,kmax,rdt
     use modfields, only : up,vp,wp,thlp, qtp,u0av,v0av,qt0av,thl0av
+                          u0,v0,w0,thl0, qt0
     implicit none
 
     integer k,t
@@ -162,19 +166,51 @@ contains
     dtm = ( rtimee-timenudge(t) ) / ( timenudge(t+1)-timenudge(t) )
     dtp = ( timenudge(t+1)-rtimee)/ ( timenudge(t+1)-timenudge(t) )
 
-    do k=1,kmax
-      currtnudge = max(rdt,tnudge(k,t)*dtp+tnudge(k,t+1)*dtm)
-      if(lunudge  ) up  (2:i1,2:j1,k)=up  (2:i1,2:j1,k)-&
-          (u0av  (k)-(unudge  (k,t)*dtp+unudge  (k,t+1)*dtm))/currtnudge
-      if(lvnudge  ) vp  (2:i1,2:j1,k)=vp  (2:i1,2:j1,k)-&
-          (v0av  (k)-(vnudge  (k,t)*dtp+vnudge  (k,t+1)*dtm))/currtnudge
-      if(lwnudge  ) wp  (2:i1,2:j1,k)=wp  (2:i1,2:j1,k)-&
-          (         -(wnudge  (k,t)*dtp+wnudge  (k,t+1)*dtm))/currtnudge
-      if(lthlnudge) thlp(2:i1,2:j1,k)=thlp(2:i1,2:j1,k)-&
-          (thl0av(k)-(thlnudge(k,t)*dtp+thlnudge(k,t+1)*dtm))/currtnudge
-      if(lqtnudge ) qtp (2:i1,2:j1,k)=qtp (2:i1,2:j1,k)-&
-          (qt0av (k)-(qtnudge (k,t)*dtp+qtnudge (k,t+1)*dtm))/currtnudge
-    end do
+    if lnudgelocal then
+      do k=1,kmax
+! Remove lines until comment if you want to keep this option
+        currtnudge = max(rdt,tnudge(k,t)*dtp+tnudge(k,t+1)*dtm)
+        if(lunudge  ) up  (2:i1,2:j1,k)=up  (2:i1,2:j1,k)-&
+            (u0av  (k)-(unudge  (k,t)*dtp+unudge  (k,t+1)*dtm))/currtnudge
+        if(lvnudge  ) vp  (2:i1,2:j1,k)=vp  (2:i1,2:j1,k)-&
+            (v0av  (k)-(vnudge  (k,t)*dtp+vnudge  (k,t+1)*dtm))/currtnudge
+        if(lwnudge  ) wp  (2:i1,2:j1,k)=wp  (2:i1,2:j1,k)-&
+            (         -(wnudge  (k,t)*dtp+wnudge  (k,t+1)*dtm))/currtnudge
+        if(lthlnudge) thlp(2:i1,2:j1,k)=thlp(2:i1,2:j1,k)-&
+            (thl0av(k)-(thlnudge(k,t)*dtp+thlnudge(k,t+1)*dtm))/currtnudge
+        do j=2,j1
+          do j=2,i1
+! This commented block is what it should look like. Now the option just defaults to
+! the nudging test Martin wants to do (02/10/2022) - nudging moisture locally with
+! a different nudging time than the other variables
+!            if(lunudge  ) up  (i,j,k)=up  (i,j,k)-&
+!                (u0  (i,j,k)-(unudge  (k,t)*dtp+unudge  (k,t+1)*dtm))/currtnudge
+!            if(lvnudge  ) vp  (i,j,k)=vp  (i,j,k)-&
+!                (v0  (i,j,k)-(vnudge  (k,t)*dtp+vnudge  (k,t+1)*dtm))/currtnudge
+!            if(lwnudge  ) wp  (i,j,k)=wp  (i,j,k)-&
+!                (w0  (i,j,k)-(wnudge  (k,t)*dtp+wnudge  (k,t+1)*dtm))/currtnudge
+!            if(lthlnudge) thlp(i,j,k)=thlp(i,j,k)-&
+!                (thl0(i,j,k)-(thlnudge(k,t)*dtp+thlnudge(k,t+1)*dtm))/currtnudge
+            if(lqtnudge ) qtp (i,j,k)=qtp (i,j,k)-&
+                (qt0(i,j,k)-(qtnudge (k,t)*dtp+qtnudge (k,t+1)*dtm))/tnudgeqt
+          end do
+        end do
+      end do
+    else
+      do k=1,kmax
+        currtnudge = max(rdt,tnudge(k,t)*dtp+tnudge(k,t+1)*dtm)
+        if(lunudge  ) up  (2:i1,2:j1,k)=up  (2:i1,2:j1,k)-&
+            (u0av  (k)-(unudge  (k,t)*dtp+unudge  (k,t+1)*dtm))/currtnudge
+        if(lvnudge  ) vp  (2:i1,2:j1,k)=vp  (2:i1,2:j1,k)-&
+            (v0av  (k)-(vnudge  (k,t)*dtp+vnudge  (k,t+1)*dtm))/currtnudge
+        if(lwnudge  ) wp  (2:i1,2:j1,k)=wp  (2:i1,2:j1,k)-&
+            (         -(wnudge  (k,t)*dtp+wnudge  (k,t+1)*dtm))/currtnudge
+        if(lthlnudge) thlp(2:i1,2:j1,k)=thlp(2:i1,2:j1,k)-&
+            (thl0av(k)-(thlnudge(k,t)*dtp+thlnudge(k,t+1)*dtm))/currtnudge
+        if(lqtnudge ) qtp (2:i1,2:j1,k)=qtp (2:i1,2:j1,k)-&
+            (qt0av (k)-(qtnudge (k,t)*dtp+qtnudge (k,t+1)*dtm))/currtnudge
+      end do
+    end if
   end subroutine nudge
 
   subroutine exitnudge
