@@ -114,6 +114,8 @@ contains
     facx       = 2*pi*kpulse/(itot*dx)
     facy       = 2*pi*kpulse/(jtot*dy)
     qtpulse    = 0.
+    qtav0      = 0.
+    qtav1      = 0.
 
     ! Calculate the levels to apply the perturbation at
     do k=1,k1
@@ -126,8 +128,9 @@ contains
         exit
       end if
     end do
-    print *, 'kstart, kend', kstart, kend 
-
+    if (myid == 0) then
+      print *, 'kstart, kend', kstart, kend 
+    end if
 
     ! Apply the perturbation
     if (lcpmip) then
