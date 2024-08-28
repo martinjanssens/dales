@@ -29,8 +29,10 @@ public :: initscalarpulse, scalarpulse, lscalarpulse
 save
 ! pulse governing variables (from namelist)
   logical :: lscalarpulse     = .false.
+  logical :: lcpmip           = .false.
   integer(kind=longint) :: timepulse
-  real    :: amppulse, kpulse, zminpulse, zmaxpulse
+  real    :: amppulse, kpulse, zminpulse, zmaxpulse, radius
+  real, allocatable :: qtav0(:),qtav1(:)
 
 contains
 
@@ -38,16 +40,16 @@ contains
 
   subroutine initscalarpulse
     use mpi
-    use modmpi,    only :myid,my_real,mpi_logical,mpi_long_long, &
-                         mpierr,comm3d
+    use modmpi,    only :myid,D_MPI_BCAST, &
+                         mpierr,commwrld
     use modglobal, only :cexpnr,runtime,ifnamopt,fname_options, &
-                         checknamelisterror,tres
+                         checknamelisterror,tres,k1
 
     implicit none
 
     integer ierr
     namelist/NAMSCALARPULSE/ &
-    lscalarpulse, timepulse, amppulse, kpulse, zminpulse, zmaxpulse
+    lscalarpulse, lcpmip, timepulse, amppulse, kpulse, zminpulse, zmaxpulse, radius
 
     if(myid==0)then
       open(ifnamopt,file=fname_options,status='old',iostat=ierr)
@@ -59,12 +61,16 @@ contains
 
     timepulse = timepulse/tres
 
-    call MPI_BCAST(lscalarpulse ,1,MPI_LOGICAL   ,0,comm3d,mpierr)
-    call MPI_BCAST(timepulse    ,1,MPI_LONG_LONG ,0,comm3d,mpierr)
-    call MPI_BCAST(amppulse     ,1,MY_REAL       ,0,comm3d,mpierr)
-    call MPI_BCAST(kpulse       ,1,MY_REAL       ,0,comm3d,mpierr)
-    call MPI_BCAST(zminpulse    ,1,MY_REAL       ,0,comm3d,mpierr)
-    call MPI_BCAST(zmaxpulse    ,1,MY_REAL       ,0,comm3d,mpierr)
+    call D_MPI_BCAST(lscalarpulse       ,1,0,commwrld,mpierr)
+    call D_MPI_BCAST(lcpmip             ,1,0,commwrld,mpierr)
+    call D_MPI_BCAST(timepulse          ,1,0,commwrld,mpierr)
+    call D_MPI_BCAST(amppulse           ,1,0,commwrld,mpierr)
+    call D_MPI_BCAST(kpulse             ,1,0,commwrld,mpierr)
+    call D_MPI_BCAST(zminpulse          ,1,0,commwrld,mpierr)
+    call D_MPI_BCAST(zmaxpulse          ,1,0,commwrld,mpierr)
+    call D_MPI_BCAST(radius             ,1,0,commwrld,mpierr)
+
+    if (lcpmip) allocate(qtav0(k1), qtav1(k1))
 
   end subroutine initscalarpulse
 
@@ -94,12 +100,13 @@ contains
 
     use modfields     , only : qtm
     use modglobal     , only : i1,j1,k1,imax,jmax, &
-                               itot,jtot,dx,dy,zf,pi
-    use modmpi        , only : myidx,myidy,myid
+                               itot,jtot,dx,dy,zf,pi, &
+                               ih,jh,ijtot
+    use modmpi        , only : myidx,myidy,myid,slabsum
 
     logical kstartflag
     integer kstart, kend, i, j, k
-    real    xf, yf, facx, facy, qtpulse
+    real    xf, yf, facx, facy, qtpulse, center_x, center_y
 
     kstartflag = .true.
     xf         = myidx*imax*dx
@@ -121,21 +128,67 @@ contains
     end do
     print *, 'kstart, kend', kstart, kend 
 
+
     ! Apply the perturbation
-    do i=2,i1
-      xf = myidx*imax*dx + dx*(i - 1.5)
-      do j=2,j1
-        yf = myidy*jmax*dy + dy*(j - 1.5)
-        qtpulse = amppulse * cos(facx*xf + pi) &
-                           * cos(facy*yf + pi)
-        if (myid == 0) then
-          print *, 'x, y, qtpulse', xf, yf, qtpulse
-        end if
-        do k=kstart,kend 
-          qtm(i,j,k) = qtm(i,j,k) + qtpulse
+    if (lcpmip) then
+      ! Protocol for cpmip
+
+      ! Calculate domain-mean profile
+      call slabsum(qtav0 ,1,k1,qtm ,2-ih,i1+ih,2-jh,j1+jh,1,k1,2,i1,2,j1,1,k1)
+      qtav0 = qtav0 / ijtot
+
+      ! Find the domain center
+      center_x = dx*itot*0.5
+      center_y = dy*jtot*0.5
+
+      ! Add the pulse
+      do i=2,i1
+        xf = myidx*imax*dx + dx*(i - 1.5)
+        do j=2,j1
+          yf = myidy*jmax*dy + dy*(j - 1.5)
+          if ((xf-center_x)**2.0D0+(yf-center_y)**2.0D0 .lt. radius**2.0D0) then
+            qtpulse = amppulse * cos( pi/2.0D0 * (sqrt( (xf-center_x)**2.0D0 + (yf-center_y)**2.0D0 ) / radius) )**2.0D0
+          else
+            qtpulse = 0.
+          end if
+          if (myid == 0) then
+            print *, 'x, y, qtpulse', xf, yf, qtpulse
+          end if
+          do k=kstart,kend 
+            qtm(i,j,k) = qtm(i,j,k) + qtpulse
+          end do
         end do
       end do
-    end do
+
+      ! Calculate domain-mean profile again
+      call slabsum(qtav1 ,1,k1,qtm ,2-ih,i1+ih,2-jh,j1+jh,1,k1,2,i1,2,j1,1,k1)
+      qtav1 = qtav1 / ijtot
+
+      ! And subtract the difference everywhere
+      do i=2,i1
+        do j=2,j1
+          do k=kstart,kend 
+            qtm(i,j,k) = qtm(i,j,k) - (qtav1(k) - qtav0(k))
+          end do
+        end do
+      end do
+
+    else
+      do i=2,i1
+        xf = myidx*imax*dx + dx*(i - 1.5)
+        do j=2,j1
+          yf = myidy*jmax*dy + dy*(j - 1.5)
+          qtpulse = amppulse * cos(facx*xf + pi) &
+                             * cos(facy*yf + pi)
+          if (myid == 0) then
+            print *, 'x, y, qtpulse', xf, yf, qtpulse
+          end if
+          do k=kstart,kend 
+            qtm(i,j,k) = qtm(i,j,k) + qtpulse
+          end do
+        end do
+      end do
+    end if
 
   end subroutine do_scalarpulse
 

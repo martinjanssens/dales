@@ -120,6 +120,7 @@ program DALES
 !----------------------------------------------------------------
 !     0.1     USE STATEMENTS FOR ADDONS STATISTICAL ROUTINES
 !----------------------------------------------------------------
+  use modscalarpulse,  only : initscalarpulse, scalarpulse
   use modcape,         only : initcape,exitcape,docape
   use modchecksim,     only : initchecksim, checksim
   use modstat_nc,      only : initstat_nc
@@ -225,6 +226,7 @@ program DALES
 
   !call initspectra2
   call initcape
+  call initscalarpulse
 
 #if defined(_OPENACC)
   call update_gpu
@@ -240,6 +242,7 @@ program DALES
   do while (timeleft>0 .or. rk3step < 3)
     call timer_tic('program/timestep', istep)
     ! Calculate new timestep, and reset tendencies to 0.
+    call scalarpulse
     call tstep_update
     call timedep
     call samptend(tend_start,firstterm=.true.)
