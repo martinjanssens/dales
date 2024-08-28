@@ -111,6 +111,7 @@ interface D_MPI_ISEND
     procedure :: D_MPI_BCAST_REAL64_S
     procedure :: D_MPI_BCAST_REAL32_S
     procedure :: D_MPI_BCAST_INT32_S
+    procedure :: D_MPI_BCAST_INT64_S
     procedure :: D_MPI_BCAST_REAL32_R1
     procedure :: D_MPI_BCAST_REAL32_R2
     procedure :: D_MPI_BCAST_REAL32_R3
@@ -128,6 +129,7 @@ interface D_MPI_ISEND
     procedure :: D_MPI_BCAST_REAL64_S_GPU
     procedure :: D_MPI_BCAST_REAL32_S_GPU
     procedure :: D_MPI_BCAST_INT32_S_GPU
+    procedure :: D_MPI_BCAST_INT64_S_GPU
     procedure :: D_MPI_BCAST_REAL32_R1_GPU
     procedure :: D_MPI_BCAST_REAL32_R2_GPU
     procedure :: D_MPI_BCAST_REAL64_R1_GPU
