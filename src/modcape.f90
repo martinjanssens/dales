@@ -456,7 +456,10 @@ contains
              rho_sum = rho_sum + rhobf(k) * dzf(k)
              thv_avg = thv_sum / rho_sum !mass-weighted average of thv up to level k
              if (thvfull(i,j,k) > thv_avg + 0.2 .or. k == k1) then
-                hmix(i,j) = zf(k)
+                ! Interpolate back down to figure out where you actually exceed thv_avg + 0.2
+                thv_avg_prev = (thv_sum - rhobf(k) * thvfull(i,j,k) * dzf(k)) / (rho_sum - rhobf(k) * dzf(k))
+                hmix(i,j) = zf(k-1) + (thv_avg_prev - thvfull(i,j,k-1) + 0.2)*dzf(k)/(thvfull(i,j,k)-thvfull(i,j,k-1) - (thv_avg -
+                thv_avg_prev))
                 thetavmix(i,j) = thv_avg
                 umix(i,j) = u_sum / rho_sum
                 vmix(i,j) = v_sum / rho_sum
@@ -464,6 +467,11 @@ contains
              end if
           end do
 
+          ! Cap at minimum 20m for CPMIP
+          if (hmix(i,j) < 20) then
+             hmix(i,j) = 20.
+          end if
+          
           ! find hinvsrf = lowest height where dT/dz < 0, height of surface inversion
           do k=1,kmax
              ! calculate T
