@@ -29,10 +29,9 @@ public :: initpulse, pulse, lpulse
 save
 ! pulse governing variables (from namelist)
   logical :: lpulse     = .false.
-  logical :: lcpmip           = .false.
   integer(kind=longint) :: timepulse
-  real    :: amppulse, kpulse, zminpulse, zmaxpulse, radius
-  real, allocatable :: qtav0(:),qtav1(:)
+  real    :: amppulse_qt, radius_qt, amppulse_thl, radius_thl, amppulse_w, radius_w, zminpulse, zmaxpulse
+  real, allocatable :: qtav0(:),qtav1(:), thlav0(:),thlav1(:), wmav1(:)
 
 contains
 
@@ -49,7 +48,7 @@ contains
 
     integer ierr
     namelist/NAMPULSE/ &
-    lpulse, lcpmip, timepulse, amppulse, kpulse, zminpulse, zmaxpulse, radius
+    lpulse, timepulse, amppulse_qt, radius_qt, amppulse_thl, radius_thl, amppulse_w, radius_w, zminpulse, zmaxpulse
 
     if(myid==0)then
       open(ifnamopt,file=fname_options,status='old',iostat=ierr)
@@ -62,15 +61,17 @@ contains
     timepulse = timepulse/tres
 
     call D_MPI_BCAST(lpulse       ,1,0,commwrld,mpierr)
-    call D_MPI_BCAST(lcpmip             ,1,0,commwrld,mpierr)
     call D_MPI_BCAST(timepulse          ,1,0,commwrld,mpierr)
-    call D_MPI_BCAST(amppulse           ,1,0,commwrld,mpierr)
-    call D_MPI_BCAST(kpulse             ,1,0,commwrld,mpierr)
+    call D_MPI_BCAST(amppulse_qt        ,1,0,commwrld,mpierr)
+    call D_MPI_BCAST(radius_qt          ,1,0,commwrld,mpierr)
+    call D_MPI_BCAST(amppulse_thl       ,1,0,commwrld,mpierr)
+    call D_MPI_BCAST(radius_thl         ,1,0,commwrld,mpierr)
+    call D_MPI_BCAST(amppulse_w         ,1,0,commwrld,mpierr)
+    call D_MPI_BCAST(radius_w           ,1,0,commwrld,mpierr)
     call D_MPI_BCAST(zminpulse          ,1,0,commwrld,mpierr)
     call D_MPI_BCAST(zmaxpulse          ,1,0,commwrld,mpierr)
-    call D_MPI_BCAST(radius             ,1,0,commwrld,mpierr)
-
-    if (lcpmip) allocate(qtav0(k1), qtav1(k1))
+    
+    allocate(qtav0(k1), qtav1(k1), thlav0(:),thlav1(:), wmav1(:))
 
   end subroutine initpulse
 
@@ -98,7 +99,7 @@ contains
 
   subroutine do_pulse
 
-    use modfields     , only : qtm
+    use modfields     , only : qtm,thlm,wm
     use modglobal     , only : i1,j1,k1,imax,jmax, &
                                itot,jtot,dx,dy,zf,pi, &
                                ih,jh,ijtot
@@ -106,16 +107,19 @@ contains
 
     logical kstartflag
     integer kstart, kend, i, j, k
-    real    xf, yf, facx, facy, qtpulse, center_x, center_y
+    real    xf, yf, qtpulse, thlpulse, wpulse, center_x, center_y
 
     kstartflag = .true.
     xf         = myidx*imax*dx
     yf         = myidy*jmax*dy
-    facx       = 2*pi*kpulse/(itot*dx)
-    facy       = 2*pi*kpulse/(jtot*dy)
     qtpulse    = 0.
+    thlpulse   = 0.
+    wpulse     = 0.
     qtav0      = 0.
     qtav1      = 0.
+    thlav0     = 0.
+    thlav1     = 0.
+    wmav1      = 0.
 
     ! Calculate the levels to apply the perturbation at
     do k=1,k1
@@ -132,66 +136,79 @@ contains
       print *, 'kstart, kend', kstart, kend 
     end if
 
-    ! Apply the perturbation
-    if (lcpmip) then
-      ! Protocol for cpmip
+    ! Apply the perturbation - following protocol for cpmip
 
-      ! Calculate domain-mean profile
-      call slabsum(qtav0 ,1,k1,qtm ,2-ih,i1+ih,2-jh,j1+jh,1,k1,2,i1,2,j1,1,k1)
-      qtav0 = qtav0 / ijtot
+    ! Calculate domain-mean profiles    
+    call slabsum(qtav0 ,1,k1,qtm ,2-ih,i1+ih,2-jh,j1+jh,1,k1,2,i1,2,j1,1,k1)
+    call slabsum(thlav0 ,1,k1,thlm ,2-ih,i1+ih,2-jh,j1+jh,1,k1,2,i1,2,j1,1,k1)
+    qtav0 = qtav0 / ijtot
+    thlav0 = thlav0 / ijtot
 
-      ! Find the domain center
-      center_x = dx*itot*0.5
-      center_y = dy*jtot*0.5
+    ! Find the domain center
+    center_x = dx*itot*0.5
+    center_y = dy*jtot*0.5
 
-      ! Add the pulse
-      do i=2,i1
+    ! Add the pulse
+    do i=2,i1
         xf = myidx*imax*dx + dx*(i - 1.5)
         do j=2,j1
-          yf = myidy*jmax*dy + dy*(j - 1.5)
-          if ((xf-center_x)**2.0D0+(yf-center_y)**2.0D0 .lt. radius**2.0D0) then
-            qtpulse = amppulse * cos( pi/2.0D0 * (sqrt( (xf-center_x)**2.0D0 + (yf-center_y)**2.0D0 ) / radius) )**2.0D0
-          else
+        yf = myidy*jmax*dy + dy*(j - 1.5)
+        
+        ! qt pulse
+        if ((xf-center_x)**2.0D0+(yf-center_y)**2.0D0 .lt. radius_qt**2.0D0) then
+            qtpulse = amppulse_qt * cos( pi/2.0D0 * (sqrt( (xf-center_x)**2.0D0 + (yf-center_y)**2.0D0 ) / radius_qt) )**2.0D0
+        else
+        else
             qtpulse = 0.
-          end if
-          if (myid == 0) then
-            print *, 'x, y, qtpulse', xf, yf, qtpulse
-          end if
-          do k=kstart,kend 
+        end if
+
+        ! thl pulse
+        if ((xf-center_x)**2.0D0+(yf-center_y)**2.0D0 .lt. radius_thl**2.0D0) then
+            thlpulse = amppulse_thl * cos( pi/2.0D0 * (sqrt( (xf-center_x)**2.0D0 + (yf-center_y)**2.0D0 ) / radius_thl) )**2.0D0
+        else
+            thlpulse = 0.
+        end if
+
+        ! w pulse
+        if ((xf-center_x)**2.0D0+(yf-center_y)**2.0D0 .lt. radius_w**2.0D0) then
+            wpulse = amppulse_w * cos( pi/2.0D0 * (sqrt( (xf-center_x)**2.0D0 + (yf-center_y)**2.0D0 ) / radius_w) )**2.0D0
+        else
+            wpulse = 0.
+        end if
+
+        ! if (myid == 0) then
+        !     print *, 'x, y, qtpulse', xf, yf, qtpulse
+        ! end if
+
+        do k=kstart,kend 
             qtm(i,j,k) = qtm(i,j,k) + qtpulse
-          end do
+            thlm(i,j,k) = thlm(i,j,k) + thlpulse
+
+            ! Apply in linearly increasing fashion, such that the (scaled) divergence
+            ! amppulse_w/(z(kend)-z(kstart) is constant with height
+            wm(i,j,k) = wm(i,j,k) + wpulse * (zm(k) - zm(kstart) / (zm(kend) - zm(kstart))
         end do
-      end do
+        end do
+    end do
 
-      ! Calculate domain-mean profile again
-      call slabsum(qtav1 ,1,k1,qtm ,2-ih,i1+ih,2-jh,j1+jh,1,k1,2,i1,2,j1,1,k1)
-      qtav1 = qtav1 / ijtot
+    ! Calculate domain-mean profiles again
+    call slabsum(qtav1  ,1,k1,qtm  ,2-ih,i1+ih,2-jh,j1+jh,1,k1,2,i1,2,j1,1,k1)
+    call slabsum(thlav1 ,1,k1,thlm ,2-ih,i1+ih,2-jh,j1+jh,1,k1,2,i1,2,j1,1,k1)
+    call slabsum(wmav1  ,1,k1,wm   ,2-ih,i1+ih,2-jh,j1+jh,1,k1,2,i1,2,j1,1,k1)
+    qtav1 = qtav1 / ijtot
+    thlav1 = thlav1 / ijtot
+    wmav1 = wmav1 / ijtot
 
-      ! And subtract the difference everywhere
-      do i=2,i1
+    ! And subtract the difference everywhere
+    do i=2,i1
         do j=2,j1
-          do k=kstart,kend 
+        do k=kstart,kend 
             qtm(i,j,k) = qtm(i,j,k) - (qtav1(k) - qtav0(k))
-          end do
+            thlm(i,j,k) = thlm(i,j,k) - (thlav1(k) - thlav0(k))
+            wm(i,j,k) = wm(i,j,k) - wmav1(k)
         end do
-      end do
-
-    else
-      do i=2,i1
-        xf = myidx*imax*dx + dx*(i - 1.5)
-        do j=2,j1
-          yf = myidy*jmax*dy + dy*(j - 1.5)
-          qtpulse = amppulse * cos(facx*xf + pi) &
-                             * cos(facy*yf + pi)
-          if (myid == 0) then
-            print *, 'x, y, qtpulse', xf, yf, qtpulse
-          end if
-          do k=kstart,kend 
-            qtm(i,j,k) = qtm(i,j,k) + qtpulse
-          end do
         end do
-      end do
-    end if
+    end do
 
   end subroutine do_pulse
 
