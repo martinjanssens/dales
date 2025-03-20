@@ -162,6 +162,7 @@ program DALES
   use moddatetime,     only : datetime
   use modemission,     only : emission
   use modopenboundary, only : openboundary_ghost,openboundary_tend,openboundary_phasevelocity,openboundary_turb
+  use modpulse,  only : initpulse, pulse
 
 !----------------------------------------------------------------
 !     0.2     USE STATEMENTS FOR TIMER MODULE
@@ -225,6 +226,8 @@ program DALES
 
   !call initspectra2
   call initcape
+  call initpulse
+
 
 #if defined(_OPENACC)
   call update_gpu
@@ -242,6 +245,7 @@ program DALES
     ! Calculate new timestep, and reset tendencies to 0.
     call tstep_update
     call timedep
+    call pulse
     call samptend(tend_start,firstterm=.true.)
     call datetime
 

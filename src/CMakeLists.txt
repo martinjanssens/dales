@@ -63,6 +63,7 @@ set( dales_srcs
 	modopenboundary.f90
 	modpois.f90
 	modprecision.f90
+	modpulse.f90
 	modquadrant.f90
 	modraddata.f90
 	modradfield.f90
