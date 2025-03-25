@@ -144,7 +144,7 @@ contains
     ! LOCAL VARIABLES
     integer :: i,j,k,ktest,tlonr,thinr,niter,nitert,kdmax,kdmaxl
     real :: Tnr,Tnr_old,ilratio,tlo,thi,esl1,esi1,qsatur,thlguess,thlguessmin,ttry,qvsl1,qvsi1
-    real :: thv_sum, rho_sum, thv_avg, u_sum, v_sum, tmpk, tmpkp
+    real :: thv_sum, rho_sum, thv_avg, thv_avg_prev, u_sum, v_sum, tmpk, tmpkp
 
     if (.not. lcape) return
     if (rk3step/=3) return
@@ -458,8 +458,7 @@ contains
              if (thvfull(i,j,k) > thv_avg + 0.2 .or. k == k1) then
                 ! Interpolate back down to figure out where you actually exceed thv_avg + 0.2
                 thv_avg_prev = (thv_sum - rhobf(k) * thvfull(i,j,k) * dzf(k)) / (rho_sum - rhobf(k) * dzf(k))
-                hmix(i,j) = zf(k-1) + (thv_avg_prev - thvfull(i,j,k-1) + 0.2)*dzf(k)/(thvfull(i,j,k)-thvfull(i,j,k-1) - (thv_avg -
-                thv_avg_prev))
+                hmix(i,j) = zf(k-1) + (thv_avg_prev - thvfull(i,j,k-1) + 0.2)*dzf(k)/(thvfull(i,j,k)-thvfull(i,j,k-1) - (thv_avg - thv_avg_prev))
                 thetavmix(i,j) = thv_avg
                 umix(i,j) = u_sum / rho_sum
                 vmix(i,j) = v_sum / rho_sum
