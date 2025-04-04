@@ -71,7 +71,7 @@ contains
     call D_MPI_BCAST(zminpulse          ,1,0,commwrld,mpierr)
     call D_MPI_BCAST(zmaxpulse          ,1,0,commwrld,mpierr)
     
-    allocate(qtav0(k1), qtav1(k1), thlav0(:),thlav1(:), wmav1(:))
+    allocate(qtav0(k1), qtav1(k1), thlav0(k1),thlav1(k1), wmav1(k1))
 
   end subroutine initpulse
 
@@ -101,7 +101,7 @@ contains
 
     use modfields     , only : qtm,thlm,wm
     use modglobal     , only : i1,j1,k1,imax,jmax, &
-                               itot,jtot,dx,dy,zf,pi, &
+                               itot,jtot,dx,dy,zf,zh,pi, &
                                ih,jh,ijtot
     use modmpi        , only : myidx,myidy,myid,slabsum
 
@@ -158,7 +158,6 @@ contains
         if ((xf-center_x)**2.0D0+(yf-center_y)**2.0D0 .lt. radius_qt**2.0D0) then
             qtpulse = amppulse_qt * cos( pi/2.0D0 * (sqrt( (xf-center_x)**2.0D0 + (yf-center_y)**2.0D0 ) / radius_qt) )**2.0D0
         else
-        else
             qtpulse = 0.
         end if
 
@@ -186,7 +185,7 @@ contains
 
             ! Apply in linearly increasing fashion, such that the (scaled) divergence
             ! amppulse_w/(z(kend)-z(kstart) is constant with height
-            wm(i,j,k) = wm(i,j,k) + wpulse * (zm(k) - zm(kstart) / (zm(kend) - zm(kstart))
+            wm(i,j,k) = wm(i,j,k) + wpulse * (zh(k) - zh(kstart)) / (zh(kend) - zh(kstart))
         end do
         end do
     end do
