@@ -33,7 +33,7 @@ private
 PUBLIC :: initcape,docape,exitcape
 save
 !NetCDF variables
-  integer,parameter :: nvar = 25
+  integer,parameter :: nvar = 27
   integer :: ncid4 = 0
   integer :: nrec = 0
   character(80) :: fname = 'cape.xxxxyxxx.xxx.nc'
@@ -107,6 +107,8 @@ contains
     call ncinfo(ncname( 23,:),'umix','u wind speed averaged over mixed layer','m/s','tt0t')
     call ncinfo(ncname( 24,:),'vmix','v wind speed averaged over mixed layer','m/s','tt0t')
     call ncinfo(ncname( 25,:),'thetavmix','theta_v averaged over mixed layer','K','tt0t')
+    call ncinfo(ncname( 26,:),'wqts','kinematic surface moisture flux','kg/kg m/s','tt0t')
+    call ncinfo(ncname( 27,:),'wthls','kinematic surface liquid-water potential temperature flux','K m/s','tt0t')
 
     call open_nc(trim(output_prefix)//fname,  ncid4,nrec,n1=imax,n2=jmax)
     if (nrec==0) then
@@ -126,6 +128,7 @@ contains
     use modstat_nc, only : lnetcdf, writestat_nc
     use modgenstat, only : qlmnlast,wthvtmnlast
     use modmicrodata, only : iqr, precep, imicro
+    use modsurfdata,only: thlflux,qtflux
     use modmpi
 #if defined(_OPENACC)
     use modgpu, only: update_host
@@ -514,6 +517,8 @@ contains
       vars(:,:,23) = umix(2:i1,2:j1)
       vars(:,:,24) = vmix(2:i1,2:j1)
       vars(:,:,25) = thetavmix(2:i1,2:j1)
+      vars(:,:,26) = qtflux(2:i1,2:j1)
+      vars(:,:,27) = thlflux(2:i1,2:j1)
       call writestat_nc(ncid4,1,tncname,(/rtimee/),nrec,.true.)
       call writestat_nc(ncid4,nvar,ncname(1:nvar,:),vars,nrec,imax,jmax)
       deallocate(vars)
